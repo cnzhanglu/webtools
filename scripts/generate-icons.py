@@ -1,61 +1,89 @@
 #!/usr/bin/env python3
-"""从 icons/fish-source.png 生成 PWA 图标（192 / 512），白色背景。"""
+"""生成透明底浅蓝小丑鱼 PWA 图标（192 / 512），鱼体尽量占满画面。"""
 from pathlib import Path
 
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "icons" / "fish-source.png"
 OUT = ROOT / "icons"
-WHITE = (255, 255, 255, 255)
+TRANSPARENT = (0, 0, 0, 0)
+
+# . = 透明  B = 浅蓝  b = 深蓝描边  W = 白色条纹  E = 眼睛(黑)
+PALETTE = {
+    ".": TRANSPARENT,
+    "B": (134, 210, 252, 255),
+    "b": (37, 99, 168, 255),
+    "W": (255, 255, 255, 255),
+    "E": (0, 0, 0, 255),
+}
+
+PIXELS = [
+    "...........bb...........",
+    "..........bBBb..........",
+    ".........bBBBBb.........",
+    "........bBBBBBBb........",
+    ".......bBBWBBBWb.......",
+    "......bBBBBWBBBBb......",
+    ".....bBBBBBWBBBBBb.....",
+    "....bBBBBBBWBBBBBBb....",
+    "...bBBBBBBBBWBBBBBBBb...",
+    "..bBBBBBBBBBWBBBBBBBBb..",
+    ".bBBBBBBBBBBWBBBBBBBBBb.",
+    "bBBBBBBBBBBBBWBBBBBBBBBb",
+    "bBBBBBEBBBBBBWBBBBBBBBBb",
+    ".bBBBBBBBBBBBWWBBBBBBBBb.",
+    "..bBBBBBBBBBBBBBBBBBBBb..",
+    "...bBBBBBBBBBBBBBBBBBb...",
+    "....bBBBBBBBBBBBBBBBb....",
+    ".....bBBBBBBBBBBBBb.....",
+    "......bbBBBBBBBBbb......",
+    "........bbbBBbbb........",
+    "..........bbb...........",
+]
 
 
-def replace_edge_black_with_white(img):
-    """将连通到边缘的黑色像素换为白色，保留鱼眼等内部黑色。"""
-    img = img.convert("RGBA")
-    w, h = img.size
+def render_fish(scale):
+    h = len(PIXELS)
+    w = len(PIXELS[0])
+    img = Image.new("RGBA", (w * scale, h * scale), TRANSPARENT)
     px = img.load()
-    visited = set()
-    stack = []
-
-    for x in range(w):
-        for y in (0, h - 1):
-            if px[x, y][:3] == (0, 0, 0):
-                stack.append((x, y))
-    for y in range(h):
-        for x in (0, w - 1):
-            if px[x, y][:3] == (0, 0, 0) and (x, y) not in visited:
-                stack.append((x, y))
-
-    while stack:
-        x, y = stack.pop()
-        if (x, y) in visited:
-            continue
-        if x < 0 or x >= w or y < 0 or y >= h:
-            continue
-        if px[x, y][:3] != (0, 0, 0):
-            continue
-        visited.add((x, y))
-        stack.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)])
-
-    for x, y in visited:
-        px[x, y] = WHITE
-
+    for y, row in enumerate(PIXELS):
+        for x, ch in enumerate(row):
+            if ch == ".":
+                continue
+            color = PALETTE[ch]
+            for dy in range(scale):
+                for dx in range(scale):
+                    px[x * scale + dx, y * scale + dy] = color
     return img
 
 
-def main():
-    img = replace_edge_black_with_white(Image.open(SRC))
+def fit_to_square(img, side, padding_ratio=0.02):
+    """缩放并居中，保留极小边距避免贴边裁切。"""
+    pad = max(1, int(side * padding_ratio))
+    inner = side - pad * 2
     w, h = img.size
-    side = max(w, h)
-    square = Image.new("RGBA", (side, side), WHITE)
-    square.paste(img, ((side - w) // 2, (side - h) // 2), img)
+    scale = min(inner / w, inner / h)
+    nw = max(1, int(w * scale))
+    nh = max(1, int(h * scale))
+    resized = img.resize((nw, nh), Image.Resampling.NEAREST)
+    square = Image.new("RGBA", (side, side), TRANSPARENT)
+    square.paste(resized, ((side - nw) // 2, (side - nh) // 2), resized)
+    return square
 
-    # 更新源图（白底版本）
-    square.save(SRC)
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    fish = render_fish(12)
+    bbox = fish.getbbox()
+    if bbox:
+        fish = fish.crop(bbox)
+
+    master = fit_to_square(fish, 512, padding_ratio=0.01)
+    master.save(OUT / "fish-source.png")
 
     for size in (192, 512):
-        out = square.resize((size, size), Image.Resampling.NEAREST)
+        out = master.resize((size, size), Image.Resampling.NEAREST)
         path = OUT / f"icon-{size}.png"
         out.save(path)
         print(f"wrote {path.relative_to(ROOT)}")
