@@ -43,7 +43,7 @@ git push -u origin main
 
 5. 点击 **Save and Deploy**
 
-部署完成后访问：`https://<项目名>.pages.dev`
+部署完成后访问：`https://webtools.pages.dev`（或你在 Cloudflare 中设置的项目名）
 
 之后每次 `git push` 自动触发新版本部署。
 
@@ -64,7 +64,7 @@ Cloudflare Dashboard → Workers & Pages → Create → Pages → **Upload asset
 ### 命令行部署
 
 ```bash
-npx wrangler pages deploy . --project-name=boc-tools
+npx wrangler pages deploy . --project-name=webtools
 ```
 
 首次运行会弹出浏览器授权 Cloudflare 登录。

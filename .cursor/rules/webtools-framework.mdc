@@ -1,0 +1,75 @@
+---
+description: 工具箱（webtools）项目框架与开发约定
+alwaysApply: true
+---
+
+# 工具箱（webtools）框架要求
+
+## 项目信息
+
+- **产品名**：工具箱
+- **GitHub 仓库**：`https://github.com/cnzhanglu/webtools.git`
+- **GitHub 用户名**：`cnzhanglu`
+- **部署**：Cloudflare Pages，Build output = `/`，无构建命令
+- **Cloudflare Pages 项目名建议**：`webtools`
+
+## 技术约束（必须遵守）
+
+- 纯静态前端：HTML + CSS + 原生 JS，**零后端**
+- **禁止**引用任何公有云 CDN / 外部框架（Google Fonts、Bootstrap、SheetJS CDN 等）
+- 所有计算在浏览器本地完成，数据不上传
+- 必须同时支持：**本地打开**（`file://` 或本地 HTTP）和 **Cloudflare Pages 部署**
+- JS 使用普通 `<script src>` 顺序加载，**不用 ES Module**（`type="module"` 在 `file://` 下可能受限）
+- xlsx 导出使用 `shared/js/xlsx.js` 内嵌纯 JS 实现，不引入第三方库
+
+## 目录结构
+
+```
+/
+├── index.html                  # 工具箱首页（索引页）
+├── README.md
+├── docs/
+│   ├── deploy-cloudflare.md    # 部署指南
+│   └── framework.md            # 框架说明（人类可读）
+├── shared/                     # 跨工具共享
+│   ├── css/common.css
+│   └── js/
+│       ├── utils.js            # 复制、下载、escHtml 等
+│       ├── xlsx.js             # xlsx 生成
+│       └── tools-registry.js   # 首页工具列表注册表
+└── tools/<tool-id>/            # 各独立工具
+    ├── index.html
+    ├── css/tool.css            # 工具专属样式（可选）
+    └── js/                     # 按职责拆分：逻辑 / 处理 / app
+```
+
+## 新增工具流程
+
+1. 在 `tools/<tool-id>/` 创建目录与 `index.html`
+2. 引用 `../../shared/css/common.css`，按需引用 shared JS
+3. 页头加「← 返回工具箱」链接：`href="../../index.html"`
+4. 在 `shared/js/tools-registry.js` 追加注册条目（`id`、`name`、`description`、`tags`、`path`、`status`）
+5. 首页 `index.html` 自动从注册表渲染，无需改首页逻辑
+
+## 网络策略工具（net-policy）约定
+
+- 路径：`tools/net-policy/`
+- 支持 IPv4/IPv6 混合输入，独立聚合前缀（IPv4 默认 /24，IPv6 默认 /64）
+- 输出模式：按端口分组 / 全部压缩为一行（端口也聚合）
+- 地址与端口连接符可自定义；单条最大地址数可拆分
+- 核心逻辑：`js/ip.js`（地址）、`js/process.js`（聚合）、`js/app.js`（UI）
+
+## 样式约定
+
+- 公共样式放 `shared/css/common.css`（header、按钮、面板、工具卡片）
+- 工具专属样式放 `tools/<id>/css/tool.css`
+- 界面文案使用中文；风格简洁，不依赖外部 UI 库
+
+## Git 与部署
+
+```bash
+git remote set-url origin https://github.com/cnzhanglu/webtools.git
+git push origin main
+```
+
+Cloudflare：关联 `cnzhanglu/webtools` 仓库，输出目录 `/`。

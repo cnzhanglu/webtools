@@ -54,8 +54,12 @@ npx serve .
 3. 在 `shared/js/tools-registry.js` 中追加一条注册条目
 4. 首页会自动显示新工具卡片
 
+## 框架与开发约定
+
+详见 [docs/framework.md](docs/framework.md)。Cursor 规则位于 `.cursor/rules/webtools-framework.mdc`。
+
 ## 部署到 Cloudflare Pages
 
 详见 [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md)。
 
-简要步骤：将本仓库推送到 GitHub，在 Cloudflare Pages 关联仓库，构建输出目录填 `/`（仓库根目录），无需构建命令。
+仓库：`https://github.com/cnzhanglu/webtools` — 在 Cloudflare Pages 关联该仓库，构建输出目录填 `/`，无需构建命令。
