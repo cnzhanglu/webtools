@@ -6,6 +6,8 @@ var SubnetCalcApp = (function () {
 
   var syncing = false;
   var currentFamily = 4;
+  var calcTimer = null;
+  var resultCells = null;
 
   var RESULT_FIELDS = [
     { key: 'network',   label: '网络地址' },
@@ -27,21 +29,19 @@ var SubnetCalcApp = (function () {
       : { min: 0, max: 128, defaultVal: 64 };
   }
 
-  function updatePrefixControls(prefix) {
+  function updatePrefixBounds() {
     var bounds = getPrefixBounds();
     var slider = $('prefix-slider');
     var num    = $('prefix-num');
-    var maskDisplay = $('mask-display');
-
     slider.min = bounds.min;
     slider.max = bounds.max;
     num.min    = bounds.min;
     num.max    = bounds.max;
+  }
 
-    var p = Math.max(bounds.min, Math.min(bounds.max, prefix));
-    slider.value = p;
-    num.value    = p;
-
+  function updateMaskDisplay(prefix) {
+    var p = prefix;
+    var maskDisplay = $('mask-display');
     if (currentFamily === 4) {
       maskDisplay.textContent = SubnetCalcIp.dottedMaskFromPrefix(p);
     } else {
@@ -49,13 +49,22 @@ var SubnetCalcApp = (function () {
     }
   }
 
+  function clampPrefix(prefix) {
+    var bounds = getPrefixBounds();
+    return Math.max(bounds.min, Math.min(bounds.max, prefix));
+  }
+
+  function stripEmbeddedPrefix(raw) {
+    var ipPart = raw.trim().split(/\s+/)[0];
+    var slashIdx = ipPart.lastIndexOf('/');
+    if (slashIdx !== -1) ipPart = ipPart.slice(0, slashIdx);
+    return ipPart;
+  }
+
   function detectFamilyFromInput() {
     var raw = $('network-input').value.trim();
     if (!raw) return currentFamily;
-    var ipPart = raw.split(/\s+/)[0];
-    var slashIdx = ipPart.lastIndexOf('/');
-    if (slashIdx !== -1) ipPart = ipPart.slice(0, slashIdx);
-    var f = SubnetCalcIp.detectFamily(ipPart);
+    var f = SubnetCalcIp.detectFamily(stripEmbeddedPrefix(raw));
     return f || currentFamily;
   }
 
@@ -70,20 +79,19 @@ var SubnetCalcApp = (function () {
     }
   }
 
-  function renderResults(data) {
+  function renderEmpty(msg) {
+    resultCells = null;
+    var tbody = $('result-body');
+    tbody.innerHTML = '<tr><td colspan="2"><span class="empty-hint">' +
+      BocUtils.escHtml(msg) + '</span></td></tr>';
+    $('family-badge').textContent = '—';
+  }
+
+  function ensureResultTable() {
+    if (resultCells) return;
     var tbody = $('result-body');
     tbody.innerHTML = '';
-
-    if (!data || data.error) {
-      tbody.innerHTML = '<tr><td colspan="2"><span class="empty-hint">' +
-        (data && data.error ? BocUtils.escHtml(data.error) : '请输入网络地址进行计算') +
-        '</span></td></tr>';
-      $('family-badge').textContent = '—';
-      return;
-    }
-
-    $('family-badge').textContent = data.family === 4 ? 'IPv4' : 'IPv6';
-
+    resultCells = {};
     RESULT_FIELDS.forEach(function (field) {
       var tr = document.createElement('tr');
       var tdLabel = document.createElement('td');
@@ -92,30 +100,54 @@ var SubnetCalcApp = (function () {
 
       var tdVal = document.createElement('td');
       tdVal.className = 'td-value';
-      tdVal.textContent = data[field.key] || '—';
+      tdVal.textContent = '—';
 
       tr.appendChild(tdLabel);
       tr.appendChild(tdVal);
       tbody.appendChild(tr);
+      resultCells[field.key] = tdVal;
     });
   }
 
-  function doCalc(updateInputFromPrefix) {
-    if (syncing) return;
-
-    var raw = $('network-input').value.trim();
-    var prefix = parseInt($('prefix-num').value, 10);
-
-    currentFamily = detectFamilyFromInput();
-    updatePrefixControls(isNaN(prefix) ? getPrefixBounds().defaultVal : prefix);
-
-    if (!raw) {
-      showError('');
-      renderResults(null);
+  function renderResults(data) {
+    if (!data || data.error) {
+      renderEmpty(data && data.error ? data.error : '请输入网络地址进行计算');
       return;
     }
 
-    var parsed = SubnetCalcIp.parseNetworkInput(raw, prefix);
+    $('family-badge').textContent = data.family === 4 ? 'IPv4' : 'IPv6';
+    ensureResultTable();
+    RESULT_FIELDS.forEach(function (field) {
+      resultCells[field.key].textContent = data[field.key] || '—';
+    });
+  }
+
+  function doCalc(opts) {
+    opts = opts || {};
+    if (syncing) return;
+
+    var raw = $('network-input').value.trim();
+    var prefix = opts.prefix !== undefined
+      ? opts.prefix
+      : parseInt($('prefix-num').value, 10);
+
+    currentFamily = detectFamilyFromInput();
+    updatePrefixBounds();
+
+    if (!raw) {
+      showError('');
+      renderEmpty('请输入网络地址进行计算');
+      return;
+    }
+
+    if (isNaN(prefix)) {
+      prefix = getPrefixBounds().defaultVal;
+    }
+    prefix = clampPrefix(prefix);
+
+    var parseStr = opts.useControlPrefix ? stripEmbeddedPrefix(raw) : raw;
+    var parsed = SubnetCalcIp.parseNetworkInput(parseStr, prefix);
+
     if (!parsed) {
       showError('无法解析输入，请检查 IP 地址格式');
       renderResults({ error: '解析失败' });
@@ -127,74 +159,138 @@ var SubnetCalcApp = (function () {
       return;
     }
 
+    if (opts.useControlPrefix) {
+      parsed.prefix = prefix;
+    }
+
     showError('');
 
-    syncing = true;
-    if (parsed.prefix !== prefix) {
+    if (opts.syncControls) {
+      syncing = true;
       $('prefix-num').value = parsed.prefix;
-      $('prefix-slider').value = parsed.prefix;
-      updatePrefixControls(parsed.prefix);
+      if (!opts.skipSliderWrite) {
+        $('prefix-slider').value = parsed.prefix;
+      }
+      updateMaskDisplay(parsed.prefix);
+      syncing = false;
     }
 
-    if (updateInputFromPrefix) {
-      var cidr = parsed.family === 4
-        ? parsed.ipStr + '/' + parsed.prefix
-        : parsed.ipStr + '/' + parsed.prefix;
-      $('network-input').value = cidr;
+    if (opts.updateInput) {
+      syncing = true;
+      $('network-input').value = parsed.ipStr + '/' + parsed.prefix;
+      syncing = false;
     }
 
-    syncing = false;
-
-    var result = SubnetCalcCore.calc(parsed);
-    renderResults(result);
+    renderResults(SubnetCalcCore.calc(parsed));
   }
 
-  function onInputChange() {
-    doCalc(false);
+  function scheduleCalc(opts, delay) {
+    if (calcTimer) clearTimeout(calcTimer);
+    calcTimer = setTimeout(function () {
+      calcTimer = null;
+      doCalc(opts);
+    }, delay === undefined ? 48 : delay);
   }
 
-  function onPrefixChange() {
+  function onNetworkInput() {
     if (syncing) return;
-    syncing = true;
-    var p = parseInt($('prefix-slider').value, 10);
-    $('prefix-num').value = p;
-    updatePrefixControls(p);
-    syncing = false;
-    doCalc(true);
+    scheduleCalc({ syncControls: true }, 80);
   }
 
-  function onPrefixNumChange() {
+  function onSliderInput() {
+    if (syncing) return;
+    var p = clampPrefix(parseInt($('prefix-slider').value, 10));
+    syncing = true;
+    $('prefix-num').value = p;
+    updateMaskDisplay(p);
+    syncing = false;
+
+    scheduleCalc({
+      prefix: p,
+      useControlPrefix: true,
+      skipSliderWrite: true,
+      syncControls: false,
+      updateInput: false,
+    });
+  }
+
+  function onSliderChange() {
+    if (calcTimer) {
+      clearTimeout(calcTimer);
+      calcTimer = null;
+    }
+    var p = clampPrefix(parseInt($('prefix-slider').value, 10));
+    doCalc({
+      prefix: p,
+      useControlPrefix: true,
+      skipSliderWrite: true,
+      syncControls: true,
+      updateInput: true,
+    });
+  }
+
+  function onPrefixNumInput() {
     if (syncing) return;
     var p = parseInt($('prefix-num').value, 10);
     if (isNaN(p)) return;
-    var bounds = getPrefixBounds();
-    p = Math.max(bounds.min, Math.min(bounds.max, p));
+    p = clampPrefix(p);
     syncing = true;
     $('prefix-slider').value = p;
-    $('prefix-num').value = p;
-    updatePrefixControls(p);
+    updateMaskDisplay(p);
     syncing = false;
-    doCalc(true);
+
+    scheduleCalc({
+      prefix: p,
+      useControlPrefix: true,
+      skipSliderWrite: true,
+      syncControls: false,
+      updateInput: false,
+    });
+  }
+
+  function onPrefixNumChange() {
+    if (calcTimer) {
+      clearTimeout(calcTimer);
+      calcTimer = null;
+    }
+    var p = parseInt($('prefix-num').value, 10);
+    if (isNaN(p)) return;
+    p = clampPrefix(p);
+    doCalc({
+      prefix: p,
+      useControlPrefix: true,
+      syncControls: true,
+      updateInput: true,
+    });
   }
 
   function loadSample() {
     $('network-input').value = '192.168.1.100/24';
     currentFamily = 4;
-    doCalc(false);
+    doCalc({ syncControls: true });
   }
 
   function loadSampleV6() {
     $('network-input').value = '2001:db8:abcd:0012::1/64';
     currentFamily = 6;
-    doCalc(false);
+    doCalc({ syncControls: true });
   }
 
   function clearAll() {
+    if (calcTimer) {
+      clearTimeout(calcTimer);
+      calcTimer = null;
+    }
     $('network-input').value = '';
     currentFamily = 4;
-    updatePrefixControls(24);
+    syncing = true;
+    $('prefix-slider').value = 24;
+    $('prefix-num').value = 24;
+    updatePrefixBounds();
+    updateMaskDisplay(24);
+    syncing = false;
     showError('');
-    renderResults(null);
+    renderEmpty('请输入网络地址，结果将自动更新');
   }
 
   function copyResults() {
@@ -212,13 +308,15 @@ var SubnetCalcApp = (function () {
   }
 
   function init() {
-    $('network-input').addEventListener('input', onInputChange);
-    $('prefix-slider').addEventListener('input', onPrefixChange);
-    $('prefix-num').addEventListener('input', onPrefixNumChange);
+    $('network-input').addEventListener('input', onNetworkInput);
+    $('prefix-slider').addEventListener('input', onSliderInput);
+    $('prefix-slider').addEventListener('change', onSliderChange);
+    $('prefix-num').addEventListener('input', onPrefixNumInput);
     $('prefix-num').addEventListener('change', onPrefixNumChange);
 
-    updatePrefixControls(24);
-    renderResults(null);
+    updatePrefixBounds();
+    updateMaskDisplay(24);
+    renderEmpty('请输入网络地址，结果将自动更新');
   }
 
   return {
