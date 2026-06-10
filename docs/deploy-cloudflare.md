@@ -15,12 +15,16 @@
 ### 1. 推送代码到 GitHub
 
 ```bash
-cd 中行小工具
-git init
 git add .
-git commit -m "init: 工具箱"
+git commit -m "update: ..."
+git push origin main
+```
+
+首次推送（若尚未关联远程）：
+
+```bash
+git remote add origin https://github.com/cnzhanglu/webtools.git
 git branch -M main
-git remote add origin https://github.com/<你的用户名>/<仓库名>.git
 git push -u origin main
 ```
 
