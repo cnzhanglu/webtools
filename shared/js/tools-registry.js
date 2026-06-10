@@ -10,13 +10,12 @@ var BocToolRegistry = [
     path: 'tools/net-policy/index.html',
     status: 'ready',
   },
-  // 后续新工具在此追加，例如：
-  // {
-  //   id: 'subnet-calc',
-  //   name: '子网计算器',
-  //   description: '...',
-  //   tags: ['网络'],
-  //   path: 'tools/subnet-calc/index.html',
-  //   status: 'ready',
-  // },
+  {
+    id: 'subnet-calc',
+    name: '子网掩码计算器',
+    description: '输入 IPv4/IPv6 地址与掩码，自动计算网络地址、广播地址、可用主机数、首尾主机地址等，支持 CIDR、点分掩码与滑动调节前缀。',
+    tags: ['网络', 'IPv4', 'IPv6'],
+    path: 'tools/subnet-calc/index.html',
+    status: 'ready',
+  },
 ];

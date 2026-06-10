@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>子网掩码计算器</title>
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>子网掩码计算器</h1>
+    <p>IPv4 / IPv6 子网信息计算，支持 CIDR、点分掩码与滑动调节前缀</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main tool-main">
+
+  <div class="panel input-panel">
+    <div class="panel-header">
+      <h2>网络输入</h2>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="SubnetCalcApp.loadSample()">IPv4 示例</button>
+        <button class="btn btn-outline" onclick="SubnetCalcApp.loadSampleV6()">IPv6 示例</button>
+        <button class="btn btn-danger"  onclick="SubnetCalcApp.clearAll()">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="input-hint">
+        支持多种输入格式，自动识别：<br>
+        <code>192.168.1.0/24</code> ·
+        <code>192.168.1.0 255.255.255.0</code> ·
+        <code>192.168.1.0/255.255.255.0</code> ·
+        <code>2001:db8::1/64</code>
+      </div>
+
+      <div class="field-group">
+        <label for="network-input">网络地址</label>
+        <input type="text" id="network-input" class="network-input"
+               placeholder="例如 192.168.1.100/24 或 192.168.1.100 255.255.255.0" spellcheck="false">
+      </div>
+
+      <div class="prefix-row">
+        <div class="field-group prefix-field">
+          <label for="prefix-num">前缀长度</label>
+          <div class="prefix-controls">
+            <input type="range" id="prefix-slider" min="0" max="32" value="24">
+            <input type="number" id="prefix-num" min="0" max="32" value="24">
+          </div>
+        </div>
+        <div class="field-group mask-field">
+          <label>子网掩码</label>
+          <div class="mask-display" id="mask-display">255.255.255.0</div>
+        </div>
+      </div>
+
+      <div class="error-box" id="error-box"></div>
+    </div>
+  </div>
+
+  <div class="panel result-panel">
+    <div class="panel-header">
+      <h2>计算结果</h2>
+      <div class="btn-row">
+        <span class="stat-badge" id="family-badge">—</span>
+        <button class="btn btn-outline" onclick="SubnetCalcApp.copyResults()">复制结果</button>
+      </div>
+    </div>
+    <div class="panel-body result-body">
+      <table id="result-table">
+        <tbody id="result-body">
+          <tr><td colspan="2"><span class="empty-hint">请输入网络地址，结果将自动更新</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="js/ip.js"></script>
+<script src="js/calc.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
