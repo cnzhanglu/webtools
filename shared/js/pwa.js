@@ -21,7 +21,9 @@ var BocPwa = (function () {
 
     var swUrl = getSwUrl();
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register(swUrl).catch(function () {
+      navigator.serviceWorker.register(swUrl).then(function (reg) {
+        reg.update();
+      }).catch(function () {
         /* 注册失败时静默降级为普通网页 */
       });
     });
