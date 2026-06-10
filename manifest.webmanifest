@@ -2,7 +2,7 @@
   "name": "工具箱",
   "short_name": "工具箱",
   "description": "纯前端离线工具集，数据不上传，支持本地计算与离线使用",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
