@@ -1,0 +1,165 @@
+/* 子网掩码计算器 — 页面专属样式 */
+
+.tool-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.input-panel,
+.result-panel {
+  min-height: 420px;
+}
+
+.input-hint {
+  font-size: .8rem;
+  color: #888;
+  line-height: 1.7;
+}
+
+.input-hint code {
+  background: #f0f2f5;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: .78rem;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-group label {
+  font-size: .78rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.network-input {
+  width: 100%;
+  border: 1px solid #d0d7e3;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: .92rem;
+  color: #1a1a2e;
+  background: #fafbff;
+  outline: none;
+  transition: border-color .15s;
+}
+
+.network-input:focus {
+  border-color: #2563a8;
+  background: #fff;
+}
+
+.prefix-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.prefix-field { flex: 1; min-width: 200px; }
+.mask-field   { min-width: 160px; }
+
+.prefix-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prefix-controls input[type="range"] {
+  flex: 1;
+  accent-color: #2563a8;
+  cursor: pointer;
+}
+
+.prefix-controls input[type="number"] {
+  width: 72px;
+  border: 1px solid #d0d7e3;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: .9rem;
+  font-family: "Menlo", "Consolas", monospace;
+  text-align: center;
+  background: #f8f9fc;
+  outline: none;
+}
+
+.prefix-controls input[type="number"]:focus {
+  border-color: #2563a8;
+  background: #fff;
+}
+
+.mask-display {
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: .92rem;
+  padding: 8px 12px;
+  background: #f0f2f5;
+  border-radius: 6px;
+  border: 1px solid #d0d7e3;
+  color: #1a3a5c;
+  font-weight: 600;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.error-box {
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: .82rem;
+  color: #b91c1c;
+  display: none;
+}
+
+.error-box.visible { display: block; }
+
+.result-body {
+  padding: 0 !important;
+}
+
+#result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+
+#result-table tbody tr:nth-child(even) { background: #f6f8fc; }
+#result-table tbody tr:hover { background: #e8f0fb; }
+
+.td-label {
+  padding: 11px 18px;
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+  width: 38%;
+  border-bottom: 1px solid #eaecf0;
+  vertical-align: top;
+}
+
+.td-value {
+  padding: 11px 18px;
+  font-family: "Menlo", "Consolas", monospace;
+  color: #1a3a5c;
+  word-break: break-all;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.empty-hint {
+  color: #aaa;
+  font-size: .9rem;
+  text-align: center;
+  padding: 60px 20px;
+  width: 100%;
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .tool-main { grid-template-columns: 1fr; }
+}
