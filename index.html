@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>工具箱</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="shared/css/common.css">
 <style>
   .portal-hero {
@@ -40,7 +47,7 @@
     <h2>工具列表</h2>
     <p class="portal-intro" style="margin:0">
       所有工具均在浏览器本地运行，不依赖任何外部 CDN 或网络框架。
-      可直接双击本页面离线使用，也可部署到 Cloudflare Pages 供团队访问。
+      可直接双击本页面离线使用，也可部署到 Cloudflare Pages 并安装为 Chrome 应用（PWA）离线访问。
     </p>
   </div>
 
@@ -78,5 +85,6 @@
   });
 })();
 </script>
+<script src="shared/js/pwa.js"></script>
 </body>
 </html>
