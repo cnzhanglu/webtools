@@ -1,0 +1,4 @@
+.DS_Store
+*.xlsx
+node_modules/
+.wrangler/

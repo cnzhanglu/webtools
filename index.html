@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工具箱</title>
+<link rel="stylesheet" href="shared/css/common.css">
+<style>
+  .portal-hero {
+    background: #fff;
+    border-radius: 10px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .portal-hero h2 {
+    font-size: 1.2rem;
+    color: #1a3a5c;
+    margin-bottom: 8px;
+  }
+  .tool-card.disabled {
+    opacity: .55;
+    pointer-events: none;
+  }
+  .tool-card .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>工具箱</h1>
+    <p>纯前端离线工具集，数据不上传，支持本地打开与 Cloudflare Pages 部署</p>
+  </div>
+</header>
+
+<main class="page-main">
+
+  <div class="portal-hero">
+    <h2>工具列表</h2>
+    <p class="portal-intro" style="margin:0">
+      所有工具均在浏览器本地运行，不依赖任何外部 CDN 或网络框架。
+      可直接双击本页面离线使用，也可部署到 Cloudflare Pages 供团队访问。
+    </p>
+  </div>
+
+  <div class="tool-grid" id="tool-grid"></div>
+
+</main>
+
+<footer class="site-footer">
+  工具箱 · 纯静态前端 · 数据不出浏览器
+</footer>
+
+<script src="shared/js/tools-registry.js"></script>
+<script>
+(function () {
+  var grid = document.getElementById('tool-grid');
+
+  BocToolRegistry.forEach(function (tool) {
+    var card = document.createElement('a');
+    card.className = 'tool-card' + (tool.status !== 'ready' ? ' disabled' : '');
+    card.href = tool.status === 'ready' ? tool.path : '#';
+
+    var tagsHtml = (tool.tags || []).map(function (t) {
+      return '<span class="tag">' + t + '</span>';
+    }).join('');
+
+    card.innerHTML =
+      '<h3>' + tool.name + '</h3>' +
+      '<p>' + tool.description + '</p>' +
+      '<div class="tag-row">' + tagsHtml + '</div>' +
+      (tool.status === 'ready'
+        ? '<span class="btn btn-primary">打开工具 →</span>'
+        : '<span class="btn btn-outline">即将上线</span>');
+
+    grid.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>
