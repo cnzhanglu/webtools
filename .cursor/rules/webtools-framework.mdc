@@ -27,6 +27,15 @@ alwaysApply: true
 ```
 /
 ├── index.html                  # 工具箱首页（索引页）
+├── manifest.webmanifest        # PWA 应用清单
+├── sw.js                       # Service Worker（离线缓存）
+├── _headers                    # Cloudflare 缓存头（sw.js no-cache）
+├── icons/
+│   ├── clownfish-source.png    # 图标源图（透明底浅蓝小丑鱼）
+│   ├── icon-192.png            # PWA / favicon
+│   └── icon-512.png
+├── scripts/
+│   └── generate-icons.py       # 从源图生成 192/512 图标
 ├── README.md
 ├── docs/
 │   ├── deploy-cloudflare.md    # 部署指南
@@ -36,7 +45,8 @@ alwaysApply: true
 │   └── js/
 │       ├── utils.js            # 复制、下载、escHtml 等
 │       ├── xlsx.js             # xlsx 生成
-│       └── tools-registry.js   # 首页工具列表注册表
+│       ├── tools-registry.js   # 首页工具列表注册表
+│       └── pwa.js              # SW 注册（file:// 自动跳过）
 └── tools/<tool-id>/            # 各独立工具
     ├── index.html
     ├── css/tool.css            # 工具专属样式（可选）
@@ -50,6 +60,81 @@ alwaysApply: true
 3. 页头加「← 返回工具箱」链接：`href="../../index.html"`
 4. 在 `shared/js/tools-registry.js` 追加注册条目（`id`、`name`、`description`、`tags`、`path`、`status`）
 5. 首页 `index.html` 自动从注册表渲染，无需改首页逻辑
+6. **PWA**：按下方「PWA 约定」在工具页加入 manifest / 图标 / `pwa.js`，并更新 `sw.js` 预缓存列表
+
+## PWA 约定
+
+站点同时支持 **file:// 本地双击** 与 **HTTPS 部署后安装为 Chrome 应用**。PWA 不得破坏 `file://` 可用性。
+
+### 双模式行为
+
+| 场景 | Service Worker | 离线缓存 | 安装为应用 |
+|------|----------------|----------|------------|
+| `file://` 本地打开 | 不注册（`pwa.js` 检测 `location.protocol === 'file:'` 后跳过） | 无 | 不支持 |
+| HTTPS 部署（Cloudflare Pages） | 自动注册根目录 `sw.js` | 有 | 支持 |
+
+### 根目录文件（勿随意移动）
+
+- `manifest.webmanifest`：`start_url` 用 `./`（**不用** `./index.html`，Cloudflare 会 307 重定向）
+- `sw.js`：预缓存与 fetch 策略，**必须放站点根目录**
+- `_headers`：`/sw.js` 设 `Cache-Control: no-cache`，确保 SW 及时更新
+- `shared/js/pwa.js`：各页面 `<body>` 末尾引入；根据脚本路径自动推算 `sw.js` 相对根路径
+
+### 各页面 `<head>` 必须包含（路径按层级调整）
+
+**首页**（`index.html`）示例：
+
+```html
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+```
+
+**工具页**（`tools/<id>/index.html`）将上述路径改为 `../../manifest.webmanifest`、`../../icons/icon-192.png`；`</body>` 前加：
+
+```html
+<script src="../../shared/js/pwa.js"></script>
+```
+
+### Service Worker（`sw.js`）约束
+
+1. **预缓存 URL 禁止写 `*/index.html`**：Cloudflare 将 `/tools/foo/index.html` **307 重定向**到 `/tools/foo/`，`cache.addAll` 会因非 200 失败并导致页面异常。须使用目录形式，例如 `./tools/net-policy/`。
+2. **安装方式**：用逐项 `fetch` + `cache.put`（`precacheAll`），单个资源失败不影响整体安装；**禁止**对含重定向 URL 使用 `cache.addAll`。
+3. **缓存策略**：
+   - 页面导航（`request.mode === 'navigate'`）：**网络优先**，离线回退缓存
+   - 静态资源（CSS/JS/图标等）：**缓存优先**，后台更新
+4. **版本号**：修改预缓存资源后必须递增 `CACHE_VERSION`（如 `webtools-v6` → `webtools-v7`），`activate` 时删除旧缓存。
+5. **新增工具时**须将以下资源追加到 `PRECACHE_URLS`：
+   - `./tools/<tool-id>/`（目录 URL，非 index.html）
+   - 该工具全部 `css/`、`js/` 静态文件
+   - 若引用新的 `shared/` 资源，一并加入
+
+### 图标
+
+- 风格：侧视浅蓝小丑鱼，**透明背景**，鱼体尽量占满画布
+- 源图：`icons/clownfish-source.png`
+- 输出：`icons/icon-192.png`、`icons/icon-512.png`（manifest 与 favicon 共用）
+- 重新生成：`pip install pillow && python3 scripts/generate-icons.py`
+- 更换图标后：重新生成 PNG，并递增 `sw.js` 的 `CACHE_VERSION`
+
+### manifest 要点
+
+- `display`: `standalone`（全屏应用模式）
+- `background_color`: `#f0f2f5`（启动画面底色；图标本身透明）
+- `theme_color`: `#2563a8`（与站点 header 主色一致）
+- `icons`：192 / 512 各一份，`purpose` 含 `any` 与 `maskable`
+
+### 禁止事项
+
+- 禁止依赖外部 CDN 加载 SW / manifest / 图标
+- 禁止在 `file://` 下强制注册 Service Worker
+- 禁止将 `sw.js` 放到子目录（注册作用域须覆盖全站）
+- 禁止预缓存会 307/404 的 URL
 
 ## 网络策略工具（net-policy）约定
 
