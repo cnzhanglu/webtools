@@ -108,6 +108,43 @@ var GslbFields = (function () {
     return Object.keys(BASE_SCHEMES);
   }
 
+  /** 某分组下 FIELD_MAP 中的全部已知字段（未导入 JSON 时作为候选池） */
+  function getKnownFields(groupKey) {
+    var prefix = groupKey + '.';
+    var keys = [];
+    var k;
+    for (k in FIELD_MAP) {
+      if (Object.prototype.hasOwnProperty.call(FIELD_MAP, k) && k.indexOf(prefix) === 0) {
+        keys.push(k);
+      }
+    }
+    return keys;
+  }
+
+  /** 合并 JSON 发现的字段与已知字段，保持 JSON 顺序优先 */
+  function mergeFieldPool(groupKey, fromJson) {
+    var known = getKnownFields(groupKey);
+    if (!fromJson || !fromJson.length) return known;
+    var out = [];
+    var seen = {};
+    var i, k;
+    for (i = 0; i < fromJson.length; i++) {
+      k = fromJson[i];
+      if (!seen[k]) {
+        out.push(k);
+        seen[k] = true;
+      }
+    }
+    for (i = 0; i < known.length; i++) {
+      k = known[i];
+      if (!seen[k]) {
+        out.push(k);
+        seen[k] = true;
+      }
+    }
+    return out;
+  }
+
   return {
     FIELD_MAP: FIELD_MAP,
     BASE_SCHEMES: BASE_SCHEMES,
@@ -115,6 +152,8 @@ var GslbFields = (function () {
     keyToCn: keyToCn,
     loadPref: loadPref,
     savePref: savePref,
-    getSchemeNames: getSchemeNames
+    getSchemeNames: getSchemeNames,
+    getKnownFields: getKnownFields,
+    mergeFieldPool: mergeFieldPool
   };
 })();

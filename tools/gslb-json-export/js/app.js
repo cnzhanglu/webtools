@@ -150,7 +150,7 @@ var GslbApp = (function () {
     }
 
     function setGroup(widget, groupKey) {
-      var all = availableFields[groupKey];
+      var all = GslbFields.mergeFieldPool(groupKey, availableFields[groupKey]);
       var selected = orders[groupKey];
       var left = [];
       var i;
