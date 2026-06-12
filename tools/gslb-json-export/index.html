@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GSLB JSON 导出工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>GSLB JSON 导出工具</h1>
+    <p>解析 GSLB 配置 JSON，按方案选择字段并导出带中文表头的 CSV，所有处理在本地浏览器完成</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main gslb-main">
+
+  <div class="section-title">操作（导入 / 方案 / 预览 / 导出）</div>
+  <div class="op-bar">
+    <input type="file" id="file-input" accept=".json,application/json">
+    <button class="btn btn-primary" id="btn-load" type="button">📂 导入 JSON</button>
+    <label for="scheme-select">GSLB 配置导出方案：</label>
+    <select id="scheme-select"></select>
+    <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览</button>
+    <button class="btn btn-success" id="btn-export" type="button">💾 导出 CSV</button>
+    <button class="btn btn-outline" id="btn-help" type="button">📘 工具说明</button>
+  </div>
+
+  <div class="status-bar" id="status-text">状态：尚未加载 JSON</div>
+
+  <div class="section-title">GSLB 配置字段选择及排序</div>
+  <div class="transfer-row">
+    <div id="transfer-domain"></div>
+    <div id="transfer-pool"></div>
+    <div id="transfer-member"></div>
+  </div>
+  <div class="reset-row">
+    <button class="btn btn-outline" id="btn-reset" type="button">↺ 恢复默认</button>
+  </div>
+
+  <div class="panel preview-panel">
+    <div class="panel-header">
+      <h2>GSLB 配置导出预览（最多 200 行）</h2>
+      <span class="stat-badge" id="preview-badge">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="preview-scroll">
+        <table id="preview-table">
+          <thead id="preview-head"></thead>
+          <tbody id="preview-body">
+            <tr><td><span class="empty-hint" style="color:#999;padding:20px;display:block">导入 JSON 并点击「预览」查看数据</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 帮助弹窗 -->
+<div class="modal-overlay" id="help-overlay">
+  <div class="modal-box">
+    <div class="modal-header">📘 使用说明</div>
+    <div class="modal-body">【GSLB JSON 导出工具 使用说明】
+
+工具用途：
+1. 用于解析 GSLB 配置 JSON 文件（包含域名、地址池、成员信息），并导出为带中文表头的 CSV 文件。
+2. 适用于运维巡检、故障排查、配置核对、变更前后比对等场景。
+
+功能特性：
+1 支持域名、地址池、成员字段自由选择与排序
+2 支持字段方案记忆（自动记忆最近配置，保存在浏览器本地）
+3 支持高级字段：HMS、Pass、池启用、DC启用等
+4 支持预览最多 200 行数据，支持 Ctrl+C 复制选中行
+5 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
+
+操作步骤：
+1. 登录 ZDNS 设备，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
+2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件
+3. 在字段配置区选择需要导出的字段，可排序
+4. 点击「预览」查看效果
+5. 点击「导出 CSV」生成文件
+
+导出说明：
+1 可导出域名关联的对象数据
+2 按选中字段顺序导出列
+
+建议使用场景：
+1 运维巡检：检查池、成员状态与 HMS 配置
+2 故障排查：快速定位异常成员/池/域名
+3 配置核对：与变更单或预案对比</div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-close-help" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="js/fields.js"></script>
+<script src="js/process.js"></script>
+<script src="js/transfer.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>

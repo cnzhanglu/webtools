@@ -1,0 +1,336 @@
+/**
+ * GSLB JSON 导出 — 数据解析与行构建
+ */
+var GslbProcess = (function () {
+  'use strict';
+
+  function isScalar(x) {
+    return typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean' || x === null;
+  }
+
+  function normalizeHmsList(value) {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      var names = [];
+      var i;
+      for (i = 0; i < value.length; i++) {
+        var item = value[i];
+        if (item && typeof item === 'object' && item.name !== undefined) {
+          names.push(String(item.name));
+        } else if (typeof item === 'string') {
+          names.push(item);
+        }
+      }
+      return names.join(',');
+    }
+    return '';
+  }
+
+  function buildDcMemberIndex(jsonData) {
+    var index = {};
+    if (!jsonData || typeof jsonData !== 'object') return index;
+
+    var dcs = jsonData.data_center || [];
+    var i, j;
+    for (i = 0; i < dcs.length; i++) {
+      var dc = dcs[i];
+      if (!dc || typeof dc !== 'object') continue;
+      var dcName = dc.name || '';
+      var gmembers = dc.gmembers || [];
+      for (j = 0; j < gmembers.length; j++) {
+        var gm = gmembers[j];
+        if (!gm || typeof gm !== 'object') continue;
+        var gmemberName = gm.gmember_name || '';
+        if (dcName && gmemberName) {
+          index[dcName + '\0' + gmemberName] = gm;
+        }
+      }
+    }
+    return index;
+  }
+
+  function getAddList(jsonData) {
+    var addList = [];
+    if (!jsonData || typeof jsonData !== 'object') return addList;
+
+    var addNode = jsonData.ADD;
+    if (addNode && typeof addNode === 'object' && !Array.isArray(addNode)) {
+      var keys = Object.keys(addNode);
+      var i;
+      for (i = 0; i < keys.length; i++) {
+        var val = addNode[keys[i]];
+        if (Array.isArray(val)) {
+          addList = addList.concat(val);
+        }
+      }
+    } else if (Array.isArray(addNode)) {
+      addList = addNode;
+    }
+    return addList;
+  }
+
+  function buildGpoolMap(jsonData) {
+    var gpMap = {};
+    if (!jsonData || typeof jsonData !== 'object') return gpMap;
+
+    var pools = jsonData.gpool || [];
+    var i;
+    for (i = 0; i < pools.length; i++) {
+      var gp = pools[i];
+      if (gp && typeof gp === 'object' && gp.name) {
+        gpMap[gp.name] = gp;
+      }
+    }
+    return gpMap;
+  }
+
+  function mergeOrder(baseKeys, foundSet) {
+    var out = [];
+    var seen = {};
+    var i, k;
+    for (i = 0; i < baseKeys.length; i++) {
+      k = baseKeys[i];
+      if (foundSet[k] && !seen[k]) {
+        out.push(k);
+        seen[k] = true;
+      }
+    }
+    var sorted = Object.keys(foundSet).sort();
+    for (i = 0; i < sorted.length; i++) {
+      k = sorted[i];
+      if (!seen[k]) {
+        out.push(k);
+        seen[k] = true;
+      }
+    }
+    return out;
+  }
+
+  function collectAvailableFields(jsonData, dcMemberIndex) {
+    var domain = {};
+    var pool = {};
+    var member = {};
+    var empty = { domain: [], pool: [], member: [] };
+
+    if (!jsonData || typeof jsonData !== 'object') return empty;
+
+    var addList = getAddList(jsonData);
+    var gpMap = buildGpoolMap(jsonData);
+    var r, gpRef, gpObj, gm, k, v, dcName, gmemberName, dcGm;
+
+    for (r = 0; r < addList.length; r++) {
+      var rec = addList[r];
+      if (!rec || typeof rec !== 'object') continue;
+
+      for (k in rec) {
+        if (!Object.prototype.hasOwnProperty.call(rec, k)) continue;
+        if (k === 'gpool_list' || k === 'alias_list') continue;
+        v = rec[k];
+        if (isScalar(v)) domain['domain.' + k] = true;
+      }
+
+      var gpRefs = rec.gpool_list || [];
+      for (gpRef = 0; gpRef < gpRefs.length; gpRef++) {
+        var ref = gpRefs[gpRef];
+        if (ref && typeof ref === 'object') {
+          for (k in ref) {
+            if (!Object.prototype.hasOwnProperty.call(ref, k)) continue;
+            v = ref[k];
+            if (isScalar(v)) {
+              if (k === 'gpool_name') pool['pool.gpool_name'] = true;
+              else pool['pool.' + k] = true;
+            }
+          }
+        }
+
+        var gpName = (ref && typeof ref === 'object') ? (ref.gpool_name || '') : '';
+        gpObj = gpMap[gpName] || {};
+        if (gpObj && typeof gpObj === 'object') {
+          for (k in gpObj) {
+            if (!Object.prototype.hasOwnProperty.call(gpObj, k)) continue;
+            if (k === 'gmember_list') continue;
+            v = gpObj[k];
+            if (isScalar(v)) pool['pool.' + k] = true;
+            if (k === 'hms' && Array.isArray(v)) pool['pool.hms'] = true;
+          }
+
+          var gmemberList = gpObj.gmember_list || [];
+          for (gm = 0; gm < gmemberList.length; gm++) {
+            var gmember = gmemberList[gm];
+            if (!gmember || typeof gmember !== 'object') continue;
+            for (k in gmember) {
+              if (!Object.prototype.hasOwnProperty.call(gmember, k)) continue;
+              v = gmember[k];
+              if (isScalar(v)) member['member.' + k] = true;
+            }
+            if (gmember.enable !== undefined) member['member.pool_enable'] = true;
+
+            dcName = gmember.dc_name || '';
+            gmemberName = gmember.gmember_name || '';
+            dcGm = dcMemberIndex[dcName + '\0' + gmemberName];
+            if (dcGm && typeof dcGm === 'object') {
+              if (Array.isArray(dcGm.hms)) member['member.dc_hms'] = true;
+              if (isScalar(dcGm.pass)) member['member.dc_pass'] = true;
+              if (isScalar(dcGm.enable)) member['member.enable'] = true;
+            }
+          }
+        }
+      }
+    }
+
+    var baseDom = GslbFields.BASE_SCHEMES['运维巡检'].domain.concat(
+      GslbFields.BASE_SCHEMES['排障分析'].domain
+    );
+    var basePool = GslbFields.BASE_SCHEMES['运维巡检'].pool.concat(
+      GslbFields.BASE_SCHEMES['排障分析'].pool
+    );
+    var baseMem = GslbFields.BASE_SCHEMES['运维巡检'].member.concat(
+      GslbFields.BASE_SCHEMES['排障分析'].member
+    );
+
+    return {
+      domain: mergeOrder(baseDom, domain),
+      pool: mergeOrder(basePool, pool),
+      member: mergeOrder(baseMem, member)
+    };
+  }
+
+  function buildAddRows(jsonData, orders, dcMemberIndex) {
+    var rows = [];
+    if (!jsonData || typeof jsonData !== 'object') return rows;
+
+    var addList = getAddList(jsonData);
+    var gpMap = buildGpoolMap(jsonData);
+    var r, gpRefIdx, gmIdx, f, sub, row;
+
+    for (r = 0; r < addList.length; r++) {
+      var dom = addList[r];
+      if (!dom || typeof dom !== 'object') continue;
+
+      var gpRefs = dom.gpool_list;
+      if (!gpRefs || !gpRefs.length) {
+        gpRefs = [{ gpool_name: '', ratio: '' }];
+      }
+
+      for (gpRefIdx = 0; gpRefIdx < gpRefs.length; gpRefIdx++) {
+        var gpRef = gpRefs[gpRefIdx];
+        if (!gpRef || typeof gpRef !== 'object') gpRef = {};
+
+        var gpName = gpRef.gpool_name || '';
+        var gpObj = gpMap[gpName] || {};
+
+        var members = (gpObj && typeof gpObj === 'object') ? (gpObj.gmember_list || []) : [];
+        if (!members.length) members = [null];
+
+        for (gmIdx = 0; gmIdx < members.length; gmIdx++) {
+          var gm = members[gmIdx];
+          row = {};
+
+          for (f = 0; f < orders.domain.length; f++) {
+            sub = orders.domain[f].replace('domain.', '');
+            row[orders.domain[f]] = dom[sub] !== undefined && dom[sub] !== null ? dom[sub] : '';
+          }
+
+          var refDict = {};
+          var k, v;
+          for (k in gpRef) {
+            if (!Object.prototype.hasOwnProperty.call(gpRef, k)) continue;
+            v = gpRef[k];
+            if (isScalar(v)) {
+              if (k === 'gpool_name') refDict.gpool_name = v;
+              else refDict[k] = v;
+            }
+          }
+
+          var objDict = {};
+          if (gpObj && typeof gpObj === 'object') {
+            for (k in gpObj) {
+              if (!Object.prototype.hasOwnProperty.call(gpObj, k)) continue;
+              v = gpObj[k];
+              if (isScalar(v)) objDict[k] = v;
+            }
+          }
+
+          for (f = 0; f < orders.pool.length; f++) {
+            sub = orders.pool[f].replace('pool.', '');
+            if (sub === 'hms') {
+              row[orders.pool[f]] = normalizeHmsList(gpObj.hms || []);
+            } else if (Object.prototype.hasOwnProperty.call(refDict, sub)) {
+              row[orders.pool[f]] = refDict[sub] !== undefined && refDict[sub] !== null ? refDict[sub] : '';
+            } else {
+              row[orders.pool[f]] = objDict[sub] !== undefined && objDict[sub] !== null ? objDict[sub] : '';
+            }
+          }
+
+          var gmDict = {};
+          if (gm && typeof gm === 'object') {
+            for (k in gm) {
+              if (!Object.prototype.hasOwnProperty.call(gm, k)) continue;
+              v = gm[k];
+              if (isScalar(v)) gmDict[k] = v;
+            }
+          }
+
+          var dcName = gmDict.dc_name || '';
+          var gmemberName = gmDict.gmember_name || '';
+          var dcGm = dcMemberIndex[dcName + '\0' + gmemberName] || {};
+
+          for (f = 0; f < orders.member.length; f++) {
+            var fieldKey = orders.member[f];
+            sub = fieldKey.replace('member.', '');
+            if (fieldKey === 'member.dc_hms') {
+              row[fieldKey] = normalizeHmsList(dcGm.hms || []);
+            } else if (fieldKey === 'member.dc_pass') {
+              row[fieldKey] = dcGm.pass !== undefined && dcGm.pass !== null ? dcGm.pass : '';
+            } else if (fieldKey === 'member.enable') {
+              row[fieldKey] = dcGm.enable !== undefined && dcGm.enable !== null ? dcGm.enable : '';
+            } else if (fieldKey === 'member.pool_enable') {
+              row[fieldKey] = gmDict.enable !== undefined && gmDict.enable !== null ? gmDict.enable : '';
+            } else {
+              row[fieldKey] = gmDict[sub] !== undefined && gmDict[sub] !== null ? gmDict[sub] : '';
+            }
+          }
+
+          rows.push(row);
+        }
+      }
+    }
+    return rows;
+  }
+
+  function escapeCsvCell(val) {
+    var s = val === null || val === undefined ? '' : String(val);
+    if (/[",\r\n]/.test(s)) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function buildCsvContent(columns, rows) {
+    var lines = [];
+    var header = [];
+    var i, c, r;
+    for (i = 0; i < columns.length; i++) {
+      header.push(escapeCsvCell(GslbFields.keyToCn(columns[i])));
+    }
+    lines.push(header.join(','));
+
+    for (r = 0; r < rows.length; r++) {
+      var line = [];
+      for (c = 0; c < columns.length; c++) {
+        line.push(escapeCsvCell(rows[r][columns[c]]));
+      }
+      lines.push(line.join(','));
+    }
+    return lines.join('\r\n');
+  }
+
+  return {
+    isScalar: isScalar,
+    normalizeHmsList: normalizeHmsList,
+    buildDcMemberIndex: buildDcMemberIndex,
+    collectAvailableFields: collectAvailableFields,
+    buildAddRows: buildAddRows,
+    buildCsvContent: buildCsvContent
+  };
+})();
