@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Punycode 域名编解码</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>Punycode 域名编解码</h1>
+    <p>国际化域名（IDN）编解码：中文 / Unicode ↔ ACE（xn-- 格式），符合 RFC 3492 / 3490</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main pny-main">
+
+  <div class="settings-bar">
+    <div class="setting-group" style="flex:1">
+      <label>说明</label>
+      <div class="hint-text">
+        每行一个域名，支持带点格式（<code>中文.com</code>）或 ACE 格式（<code>xn--fiq228c.com</code>）。<br>
+        「自动转换」根据内容识别方向；也可强制「全部编码」或「全部解码」。空行与 <code>#</code> 注释行自动跳过。
+      </div>
+    </div>
+    <div class="setting-group">
+      <label>&nbsp;</label>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="PunycodeApp.processInput()">自动转换</button>
+        <button class="btn btn-outline" onclick="PunycodeApp.encodeAll()">全部编码</button>
+        <button class="btn btn-outline" onclick="PunycodeApp.decodeAll()">全部解码</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>输入域名</h2>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="PunycodeApp.loadSample()">加载示例</button>
+        <button class="btn btn-danger" onclick="PunycodeApp.clearInput()">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <textarea id="input-area" placeholder="每行一个域名，例如：&#10;中文.com&#10;xn--fiq228c.com&#10;münchen.de"></textarea>
+      <div class="error-box" id="error-box"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>转换结果</h2>
+      <div class="btn-row">
+        <span class="stat-badge" id="stat-badge">—</span>
+        <button class="btn btn-outline" onclick="PunycodeApp.copyOutput()">复制结果</button>
+        <button class="btn btn-outline" onclick="PunycodeApp.fillOutputToInput()">结果 → 输入框</button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="result-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>输入</th>
+              <th>转换结果</th>
+              <th>方向</th>
+            </tr>
+          </thead>
+          <tbody id="result-body">
+            <tr><td colspan="4"><span class="empty-hint">输入域名后点击「自动转换」</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="js/punycode.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>

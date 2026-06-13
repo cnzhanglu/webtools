@@ -1,0 +1,167 @@
+/* URL 编解码 */
+
+.url-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-bar {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.setting-group > label {
+  font-size: .78rem;
+  font-weight: 700;
+  color: #555;
+}
+
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 14px;
+  border: 1.5px solid #d0d7e3;
+  border-radius: 8px;
+  background: #f8f9fc;
+  transition: all .15s;
+  min-width: 220px;
+}
+.radio-label:hover { border-color: #2563a8; background: #eff6ff; }
+.radio-label input[type="radio"] { margin-top: 3px; accent-color: #2563a8; flex-shrink: 0; }
+.radio-label span { display: flex; flex-direction: column; gap: 2px; }
+.radio-label b { font-size: .88rem; color: #1a3a5c; }
+.radio-label em { font-style: normal; font-size: .76rem; color: #888; }
+
+.radio-label:has(input:checked) {
+  border-color: #2563a8;
+  background: #eff6ff;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 8px;
+}
+.tab-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1.5px solid #d0d7e3;
+  background: #fff;
+  color: #555;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.tab-btn:hover { border-color: #2563a8; color: #2563a8; background: #eff6ff; }
+.tab-btn.active { border-color: #2563a8; background: #2563a8; color: #fff; }
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.io-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.io-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.io-label {
+  font-size: .82rem;
+  font-weight: 600;
+  color: #555;
+  display: flex;
+  align-items: center;
+}
+
+textarea {
+  flex: 1;
+  min-height: 200px;
+  resize: vertical;
+  border: 1px solid #d0d7e3;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: .85rem;
+  line-height: 1.65;
+  color: #1a1a2e;
+  background: #fafbff;
+  outline: none;
+  transition: border-color .15s;
+  width: 100%;
+}
+textarea:focus { border-color: #2563a8; background: #fff; }
+textarea[readonly] { background: #f4f6fa; }
+
+.btn-sm {
+  padding: 3px 10px !important;
+  font-size: .76rem !important;
+}
+
+.status-row {
+  margin-top: 6px;
+  min-height: 20px;
+}
+.status-text {
+  font-size: .82rem;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.diff-area {
+  margin-top: 8px;
+  border-radius: 7px;
+  overflow: hidden;
+  font-size: .83rem;
+}
+.diff-row {
+  display: flex;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #eaecf0;
+}
+.diff-label {
+  font-size: .76rem;
+  font-weight: 600;
+  color: #888;
+  width: 52px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.diff-val {
+  font-family: "Menlo", "Consolas", monospace;
+  word-break: break-all;
+  line-height: 1.6;
+  flex: 1;
+}
+.diff-before { background: #fff3cd; padding: 2px 6px; border-radius: 4px; }
+.diff-after  { background: #d4edda; padding: 2px 6px; border-radius: 4px; }
+.diff-same { color: #aaa; font-style: italic; padding: 6px 12px; display: block; }
+
+@media (max-width: 860px) {
+  .io-row { grid-template-columns: 1fr; }
+  .radio-group { flex-direction: column; }
+}

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>URL 编解码工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>URL 编解码工具</h1>
+    <p>encodeURIComponent / encodeURI / 表单编码，支持单行与批量模式</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main url-main">
+
+  <!-- 编码模式选择 -->
+  <div class="settings-bar">
+    <div class="setting-group">
+      <label>编码模式</label>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input type="radio" name="codec-mode" value="component" checked>
+          <span><b>encodeURIComponent</b><em>适合编码参数值、路径片段</em></span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="codec-mode" value="full">
+          <span><b>encodeURI</b><em>编码完整 URL（保留 :// ? # 等结构字符）</em></span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="codec-mode" value="form">
+          <span><b>表单编码</b><em>同 encodeURIComponent 但空格变为 +</em></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="single">单行模式</button>
+    <button class="tab-btn" data-tab="batch">批量模式</button>
+  </div>
+
+  <!-- 单行模式 -->
+  <div class="tab-pane active" id="tab-single">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>编解码</h2>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="UrlCodecApp.doProcess('encode')">编码 →</button>
+          <button class="btn btn-primary" onclick="UrlCodecApp.doProcess('decode')">← 解码</button>
+          <button class="btn btn-outline" onclick="UrlCodecApp.swapInputOutput()">⇅ 交换</button>
+          <button class="btn btn-outline" onclick="UrlCodecApp.loadSample()">示例</button>
+          <button class="btn btn-danger" onclick="UrlCodecApp.clearAll()">清空</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="io-row">
+          <div class="io-col">
+            <label class="io-label">输入</label>
+            <textarea id="main-input" placeholder="输入文本或 URL…"></textarea>
+          </div>
+          <div class="io-col">
+            <label class="io-label">
+              输出
+              <button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="UrlCodecApp.copyOutput()">复制</button>
+            </label>
+            <textarea id="main-output" placeholder="结果显示在这里…" readonly></textarea>
+          </div>
+        </div>
+        <div class="status-row">
+          <span id="status-text" class="status-text"></span>
+        </div>
+        <div class="diff-area" id="diff-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量模式 -->
+  <div class="tab-pane" id="tab-batch">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>批量编解码（每行一条）</h2>
+        <div class="btn-row">
+          <span class="stat-badge" id="batch-stat"></span>
+          <button class="btn btn-primary" onclick="UrlCodecApp.batchProcess('encode')">批量编码</button>
+          <button class="btn btn-primary" onclick="UrlCodecApp.batchProcess('decode')">批量解码</button>
+          <button class="btn btn-outline" onclick="UrlCodecApp.batchSwap()">⇅ 交换</button>
+          <button class="btn btn-outline" onclick="UrlCodecApp.loadSample()">示例</button>
+          <button class="btn btn-outline" onclick="UrlCodecApp.copyBatchOutput()">复制结果</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="io-row">
+          <div class="io-col">
+            <label class="io-label">输入（每行一条）</label>
+            <textarea id="batch-input" placeholder="每行一条内容…"></textarea>
+          </div>
+          <div class="io-col">
+            <label class="io-label">输出</label>
+            <textarea id="batch-output" placeholder="结果显示在这里…" readonly></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>
