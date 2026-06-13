@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIDR 网段对比工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>CIDR 网段对比工具</h1>
+    <p>对比两份 IP / CIDR 清单（IPv4 / IPv6），判断 B 清单网段是否被 A 清单覆盖</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main cidr-main">
+
+  <div class="settings-bar">
+    <div class="setting-group" style="flex:1">
+      <label>说明</label>
+      <div class="hint-text">
+        每行一条，支持 <code>192.168.1.1</code>、<code>192.168.1.0/24</code>、<code>192.168.1.1-192.168.1.255</code> 及 IPv6；<code>#</code> 或 <code>//</code> 开头为注释。无掩码 IP 视为 /32（IPv6 /128）。
+      </div>
+    </div>
+    <div class="setting-group" style="margin-left:auto">
+      <label>&nbsp;</label>
+      <button class="btn btn-primary" onclick="CidrVsApp.doCompare()">▶ 开始对比</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>清单 A（基准覆盖网段）</h2>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="CidrVsApp.triggerLoad('file-a')">从文件加载</button>
+        <button class="btn btn-outline" onclick="CidrVsApp.loadSample()">加载示例</button>
+        <button class="btn btn-danger" onclick="CidrVsApp.clearInput('input-a')">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <textarea id="input-a" placeholder="例如：&#10;10.0.0.0/8&#10;2001:db8::/32"></textarea>
+      <input type="file" id="file-a" accept=".txt,.csv,.text,.list" hidden>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>清单 B（待检查网段）</h2>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="CidrVsApp.triggerLoad('file-b')">从文件加载</button>
+        <button class="btn btn-danger" onclick="CidrVsApp.clearInput('input-b')">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <textarea id="input-b" placeholder="例如：&#10;10.1.2.3&#10;192.168.1.0/24"></textarea>
+      <input type="file" id="file-b" accept=".txt,.csv,.text,.list" hidden>
+    </div>
+  </div>
+
+  <div class="panel result-panel">
+    <div class="panel-header">
+      <h2>对比结果</h2>
+      <div class="btn-row">
+        <span class="stat-badge" id="stat-badge">—</span>
+        <button class="btn btn-outline" onclick="CidrVsApp.copyResult()">复制结果</button>
+        <button class="btn btn-success" onclick="CidrVsApp.exportXlsx()">导出 xlsx</button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="error-box" id="error-box" style="margin:14px 14px 0"></div>
+      <div class="result-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>B 原始</th>
+              <th>B 规范化</th>
+              <th>协议</th>
+              <th>覆盖状态</th>
+              <th>匹配 A 网段</th>
+            </tr>
+          </thead>
+          <tbody id="result-body">
+            <tr><td colspan="6"><span class="empty-hint">输入两份清单后点击「开始对比」</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/xlsx.js"></script>
+<script src="../../shared/js/ipcidr.js"></script>
+<script src="js/process.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>

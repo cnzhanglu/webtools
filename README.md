@@ -58,6 +58,10 @@ npx serve .
 
 详见 [docs/framework.md](docs/framework.md)。Cursor 规则位于 `.cursor/rules/webtools-framework.mdc`。
 
+## 分支与工作流
+
+日常开发统一在 `dev` 分支进行，提交并推送到 `origin/dev`；验证无误后再合并到 `main` 主线并推送。禁止在 `main` 上直接开发，禁止创建额外长期功能分支。
+
 ## 部署到 Cloudflare Pages
 
 详见 [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md)。

@@ -150,11 +150,39 @@ alwaysApply: true
 - 工具专属样式放 `tools/<id>/css/tool.css`
 - 界面文案使用中文；风格简洁，不依赖外部 UI 库
 
-## Git 与部署
+## Git 分支与工作流
+
+- **main**：生产主线，仅接收已验证的合并，不直接开发
+- **dev**：唯一开发分支，所有功能修改、修复、新工具均**先提交并推送到 dev**
+
+### 日常开发
+
+```bash
+git checkout dev
+git pull origin dev
+# 开发、提交
+git push origin dev
+```
+
+### 发布到主线（验证通过后）
+
+```bash
+git checkout main
+git pull origin main
+git merge dev
+git push origin main
+git checkout dev
+```
+
+### 禁止事项
+
+- 禁止在 main 上直接开发（除紧急 hotfix，且事后须同步回 dev）
+- 禁止创建额外长期功能分支（统一使用 dev）
+
+## 部署
 
 ```bash
 git remote set-url origin https://github.com/cnzhanglu/webtools.git
-git push origin main
 ```
 
 Cloudflare：关联 `cnzhanglu/webtools` 仓库，输出目录 `/`。

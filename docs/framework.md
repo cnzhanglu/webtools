@@ -35,4 +35,31 @@
 
 - `BocUtils` — 工具函数（复制、下载、HTML 转义）
 - `BocXlsx` — xlsx 导出
+- `BocIpCidr` — IPv4/IPv6 地址、CIDR、范围解析与网段合并算法
 - `BocToolRegistry` — 工具列表数组
+
+## Git 分支与工作流
+
+- **main**：生产主线，仅接收已验证的合并，不直接开发
+- **dev**：唯一开发分支，所有功能修改、修复、新工具均先提交并推送到 dev
+
+日常开发：
+
+```bash
+git checkout dev
+git pull origin dev
+# 开发、提交
+git push origin dev
+```
+
+验证通过后发布到主线：
+
+```bash
+git checkout main
+git pull origin main
+git merge dev
+git push origin main
+git checkout dev
+```
+
+禁止在 main 上直接开发，禁止创建额外长期功能分支（统一使用 dev）。

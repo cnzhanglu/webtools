@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网段汇总合并工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>网段汇总合并工具</h1>
+    <p>输入 IP / CIDR / 范围（IPv4 / IPv6），按严格或宽松模式精确合并为最小网段集</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main summary-main">
+
+  <div class="settings-bar">
+    <div class="setting-group">
+      <label>汇总模式</label>
+      <select id="mode-select">
+        <option value="strict">严格（仅合并等长连续网段）</option>
+        <option value="loose">宽松（允许不等长合并）</option>
+      </select>
+    </div>
+    <div class="setting-group" style="flex:1">
+      <label>说明</label>
+      <div class="hint-text">
+        每行一条，支持 <code>192.168.1.1</code>、<code>192.168.1.0/24</code>、<code>192.168.1.1-192.168.1.255</code> 及 IPv6；<code>#</code> 或 <code>//</code> 开头为注释，空行忽略。
+      </div>
+    </div>
+    <div class="setting-group" style="margin-left:auto">
+      <label>&nbsp;</label>
+      <button class="btn btn-primary" onclick="NetSummaryApp.doSummarize()">▶ 开始汇总</button>
+    </div>
+  </div>
+
+  <div class="panel input-panel">
+    <div class="panel-header">
+      <h2>输入网段清单</h2>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="NetSummaryApp.triggerLoad()">从文件加载</button>
+        <button class="btn btn-outline" onclick="NetSummaryApp.loadSample()">加载示例</button>
+        <button class="btn btn-danger" onclick="NetSummaryApp.clearInput()">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <textarea id="input-area" placeholder="例如：&#10;192.168.0.0/24&#10;192.168.1.0/24&#10;10.0.0.1-10.0.0.255&#10;2001:db8::/48"></textarea>
+      <input type="file" id="file-input" accept=".txt,.csv,.text,.list" hidden>
+      <div class="error-box" id="error-box"></div>
+    </div>
+  </div>
+
+  <div class="panel report-panel">
+    <div class="panel-header">
+      <h2>汇总报告</h2>
+    </div>
+    <div class="panel-body">
+      <div class="report-box" id="report-box">
+        <span class="empty-hint" style="padding:30px 10px">汇总后显示统计信息</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel result-panel">
+    <div class="panel-header">
+      <h2>汇总结果</h2>
+      <div class="btn-row">
+        <span class="stat-badge" id="stat-badge">—</span>
+        <button class="btn btn-outline" onclick="NetSummaryApp.copyResult()">复制结果</button>
+        <button class="btn btn-success" onclick="NetSummaryApp.exportXlsx()">导出 xlsx</button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="result-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>序号</th>
+              <th>汇总网段（CIDR）</th>
+              <th>协议</th>
+              <th>地址数</th>
+              <th>来源条目</th>
+            </tr>
+          </thead>
+          <tbody id="result-body">
+            <tr><td colspan="5"><span class="empty-hint">输入清单后点击「开始汇总」</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/xlsx.js"></script>
+<script src="../../shared/js/ipcidr.js"></script>
+<script src="js/process.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>

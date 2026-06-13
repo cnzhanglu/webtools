@@ -26,4 +26,20 @@ var BocToolRegistry = [
     path: 'tools/gslb-json-export/index.html',
     status: 'ready',
   },
+  {
+    id: 'cidr-vs',
+    name: 'CIDR 网段对比',
+    description: '对比两份 IP/CIDR 清单（IPv4/IPv6），判断 B 清单网段是否被 A 清单覆盖，支持粘贴或文件加载、可视化结果与 xlsx 导出。',
+    tags: ['网络', 'IPv4', 'IPv6', 'CIDR'],
+    path: 'tools/cidr-vs/index.html',
+    status: 'ready',
+  },
+  {
+    id: 'net-summary',
+    name: '网段汇总合并',
+    description: '输入 IP/CIDR/范围（IPv4/IPv6），按严格或宽松模式精确合并为最小网段集，提供汇总报告、来源映射与 xlsx 导出。',
+    tags: ['网络', 'IPv4', 'IPv6', 'CIDR'],
+    path: 'tools/net-summary/index.html',
+    status: 'ready',
+  },
 ];

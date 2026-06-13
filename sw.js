@@ -5,7 +5,7 @@
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  */
-var CACHE_VERSION = 'webtools-v6';
+var CACHE_VERSION = 'webtools-v7';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -14,6 +14,7 @@ var PRECACHE_URLS = [
   './shared/css/common.css',
   './shared/js/utils.js',
   './shared/js/xlsx.js',
+  './shared/js/ipcidr.js',
   './shared/js/tools-registry.js',
   './shared/js/pwa.js',
   './icons/icon-192.png',
@@ -28,6 +29,20 @@ var PRECACHE_URLS = [
   './tools/subnet-calc/js/ip.js',
   './tools/subnet-calc/js/calc.js',
   './tools/subnet-calc/js/app.js',
+  './tools/gslb-json-export/',
+  './tools/gslb-json-export/css/tool.css',
+  './tools/gslb-json-export/js/fields.js',
+  './tools/gslb-json-export/js/process.js',
+  './tools/gslb-json-export/js/transfer.js',
+  './tools/gslb-json-export/js/app.js',
+  './tools/cidr-vs/',
+  './tools/cidr-vs/css/tool.css',
+  './tools/cidr-vs/js/process.js',
+  './tools/cidr-vs/js/app.js',
+  './tools/net-summary/',
+  './tools/net-summary/css/tool.css',
+  './tools/net-summary/js/process.js',
+  './tools/net-summary/js/app.js',
 ];
 
 function precacheAll(cache, urls) {
