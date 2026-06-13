@@ -5,7 +5,7 @@
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  */
-var CACHE_VERSION = 'webtools-v9';
+var CACHE_VERSION = 'webtools-v10';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -56,6 +56,14 @@ var PRECACHE_URLS = [
   './tools/url-codec/',
   './tools/url-codec/css/tool.css',
   './tools/url-codec/js/app.js',
+  './tools/iptables-gen/',
+  './tools/iptables-gen/css/tool.css',
+  './tools/iptables-gen/js/template.js',
+  './tools/iptables-gen/js/validate.js',
+  './tools/iptables-gen/js/generate.js',
+  './tools/iptables-gen/js/parse.js',
+  './tools/iptables-gen/js/store.js',
+  './tools/iptables-gen/js/app.js',
 ];
 
 function precacheAll(cache, urls) {

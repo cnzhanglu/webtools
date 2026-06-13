@@ -74,4 +74,12 @@ var BocToolRegistry = [
     path: 'tools/url-codec/index.html',
     status: 'ready',
   },
+  {
+    id: 'iptables-gen',
+    name: 'iptables 规则生成',
+    description: '固定前缀策略 + 白名单（DNS/集群内部/SNMP/mgmt）+ 结尾拒绝，三段式生成 iptables/ip6tables 规则字符串；IPv4/IPv6 分离，支持合法性校验、现有规则导入识别、可编辑模板与单文件多设备本地存储。',
+    tags: ['安全', 'iptables', '防火墙'],
+    path: 'tools/iptables-gen/index.html',
+    status: 'ready',
+  },
 ];
