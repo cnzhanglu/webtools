@@ -139,14 +139,15 @@ var BocXlsx = (function () {
     var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
       '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">\n' +
       '  <fonts>\n    <font><sz val="11"/><name val="Calibri"/></font>\n' +
-      '    <font><sz val="11"/><name val="Calibri"/><b/></font>\n  </fonts>\n' +
+      '    <font><sz val="11"/><name val="Calibri"/><b/></font>\n' +
+      '    <font><sz val="11"/><name val="Calibri"/><b/><color rgb="FFFFFFFF"/></font>\n  </fonts>\n' +
       '  <fills>\n    <fill><patternFill patternType="none"/></fill>\n' +
       '    <fill><patternFill patternType="gray125"/></fill>\n' +
-      '    <fill><patternFill patternType="solid"><fgColor rgb="FF1A3A5C"/></patternFill></fill>\n' +
+      '    <fill><patternFill patternType="solid"><fgColor rgb="FF5B9BD5"/></patternFill></fill>\n' +
       '  </fills>\n  <borders><border><left/><right/><top/><bottom/><diagonal/></border></borders>\n' +
       '  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>\n' +
       '  <cellXfs>\n    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>\n' +
-      '    <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0"><alignment vertical="center"/></xf>\n' +
+      '    <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0"><alignment vertical="center"/></xf>\n' +
       '    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1" vertical="top"/></xf>\n' +
       '  </cellXfs>\n</styleSheet>';
 
