@@ -148,3 +148,10 @@ a { color: inherit; text-decoration: none; }
   font-size: .78rem;
   color: #999;
 }
+.site-footer a {
+  color: #2563a8;
+  text-decoration: none;
+}
+.site-footer a:hover {
+  text-decoration: underline;
+}

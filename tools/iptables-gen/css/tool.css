@@ -1,5 +1,16 @@
 /* iptables 规则生成工具 — 页面专属样式 */
 
+.tool-caution-banner {
+  max-width: 1600px;
+  margin: 0 auto 12px;
+  padding: 10px 20px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: .85rem;
+  border-radius: 8px;
+}
+
 .tool-main {
   display: flex;
   flex-direction: column;
