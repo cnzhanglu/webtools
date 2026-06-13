@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iptables 规则生成工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>iptables / ip6tables 规则生成工具</h1>
+    <p>固定前缀 + 白名单 + 结尾拒绝，三段式生成规则字符串，支持校验、导入、本地多设备存储</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main tool-main">
+
+  <!-- 顶部工具条 -->
+  <div class="toolbar">
+    <div class="setting-group">
+      <label>项目名称</label>
+      <input type="text" id="project-name" placeholder="新项目">
+    </div>
+    <div class="settings-divider"></div>
+    <div class="btn-row toolbar-actions">
+      <button class="btn btn-outline" onclick="IptablesApp.newProject()">新建</button>
+      <button class="btn btn-outline" onclick="IptablesApp.openFilePicker()">打开文件</button>
+      <button class="btn btn-success" onclick="IptablesApp.saveFile()">保存文件</button>
+      <button class="btn btn-outline" onclick="IptablesApp.openImport()">导入现有规则</button>
+      <button class="btn btn-outline" onclick="IptablesApp.openTemplate()">编辑模板</button>
+    </div>
+    <input type="file" id="file-input" accept=".json,application/json" style="display:none">
+    <div class="upgrade-hint" id="upgrade-hint" style="display:none">
+      <span>检测到文件模板版本较旧。</span>
+      <button class="btn btn-primary btn-sm" onclick="IptablesApp.upgradeTemplates()">升级到最新模板</button>
+    </div>
+  </div>
+
+  <div class="work-row">
+
+    <!-- 设备列表 -->
+    <div class="panel devices-panel">
+      <div class="panel-header">
+        <h2>设备</h2>
+        <button class="btn btn-primary btn-sm" onclick="IptablesApp.addDevice()">+ 新增</button>
+      </div>
+      <div class="panel-body" style="gap:6px">
+        <ul class="device-list" id="device-list"></ul>
+      </div>
+    </div>
+
+    <!-- 编辑区 -->
+    <div class="panel editor-panel">
+      <div class="panel-header">
+        <h2 id="editor-title">设备配置</h2>
+        <div class="btn-row">
+          <button class="btn btn-outline btn-sm" onclick="IptablesApp.renameDevice()">重命名</button>
+          <button class="btn btn-danger btn-sm" onclick="IptablesApp.removeDevice()">删除设备</button>
+        </div>
+      </div>
+
+      <div class="stack-tabs">
+        <button class="stack-tab active" data-stack="v4" onclick="IptablesApp.switchStack('v4')">IPv4 (iptables)</button>
+        <button class="stack-tab" data-stack="v6" onclick="IptablesApp.switchStack('v6')">IPv6 (ip6tables)</button>
+      </div>
+
+      <div class="panel-body">
+
+        <div class="override-row">
+          <label class="chk">
+            <input type="checkbox" id="override-toggle" onchange="IptablesApp.toggleOverride()">
+            本设备使用独立模板（覆盖项目默认）
+          </label>
+        </div>
+
+        <section class="editor-section">
+          <h3>白名单（每行一个 IP / CIDR，留空 = 对所有源开放）</h3>
+          <div id="whitelist-container"></div>
+        </section>
+
+        <section class="editor-section">
+          <h3>自定义附加规则（每行一条，可含或不含命令名）</h3>
+          <textarea id="extra-rules" class="code-area" placeholder="例如：&#10;-A INPUT -p tcp --dport 8080 -j ACCEPT -m comment --comment &quot;custom&quot;"></textarea>
+        </section>
+
+        <section class="editor-section">
+          <h3>固定前缀策略（可启用/停用）</h3>
+          <div id="prefix-toggles" class="toggle-list"></div>
+        </section>
+
+        <section class="editor-section">
+          <h3>结尾拒绝策略（可启用/停用）</h3>
+          <div id="suffix-toggles" class="toggle-list"></div>
+        </section>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="IptablesApp.generate()">▶ 生成规则</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 输出 -->
+    <div class="panel output-panel">
+      <div class="panel-header">
+        <h2>生成结果<span id="out-stack-label" class="muted"></span></h2>
+        <div class="btn-row">
+          <span class="stat-badge" id="stat-badge">—</span>
+          <button class="btn btn-outline" onclick="IptablesApp.copyOutput()">复制</button>
+          <button class="btn btn-success" onclick="IptablesApp.exportSh()">导出 .sh</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <textarea id="output-area" class="code-area output-area" readonly placeholder="点击「生成规则」后在此显示当前设备 / 当前协议族的规则字符串"></textarea>
+        <div class="validate-box" id="validate-box"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 导入弹层 -->
+<div class="modal-mask" id="import-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>导入现有规则</h3>
+      <button class="modal-close" onclick="IptablesApp.closeImport()">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted">粘贴 <code>iptables-save</code> 或 <code>iptables/ip6tables -A ...</code> 文本。无命令名的行将归入下方所选协议族；自动识别白名单、固定策略与自定义规则。</p>
+      <div class="setting-group">
+        <label>无命令名行归入</label>
+        <select id="import-stack">
+          <option value="v4">IPv4 (iptables)</option>
+          <option value="v6">IPv6 (ip6tables)</option>
+        </select>
+      </div>
+      <label class="chk"><input type="checkbox" id="import-replace"> 覆盖当前设备（默认合并追加）</label>
+      <textarea id="import-text" class="code-area" placeholder="iptables -A INPUT -s 10.0.0.1 -p udp --dport 53 -j ACCEPT -m comment --comment &quot;DNS UDP whitelist&quot;"></textarea>
+      <div class="import-result muted" id="import-result"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="IptablesApp.closeImport()">取消</button>
+      <button class="btn btn-primary" onclick="IptablesApp.doImport()">识别并导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 模板编辑弹层 -->
+<div class="modal-mask" id="template-modal" style="display:none">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>编辑模板 <span id="tpl-target" class="muted"></span></h3>
+      <button class="modal-close" onclick="IptablesApp.closeTemplate()">×</button>
+    </div>
+    <div class="modal-body">
+      <section class="tpl-section">
+        <div class="tpl-section-head">
+          <h4>固定前缀策略</h4>
+          <button class="btn btn-outline btn-sm" onclick="IptablesApp.tplAddRule('prefix')">+ 添加</button>
+        </div>
+        <div id="tpl-prefix-list" class="tpl-rule-list"></div>
+      </section>
+      <section class="tpl-section">
+        <div class="tpl-section-head">
+          <h4>白名单类型</h4>
+          <button class="btn btn-outline btn-sm" onclick="IptablesApp.tplAddWhitelist()">+ 添加类型</button>
+        </div>
+        <p class="muted">规则模板中使用 <code>{src}</code> 占位符：有 IP 时替换为 <code>-s &lt;ip&gt;</code>，留空时移除。每行一条。</p>
+        <div id="tpl-wl-list" class="tpl-rule-list"></div>
+      </section>
+      <section class="tpl-section">
+        <div class="tpl-section-head">
+          <h4>结尾拒绝策略</h4>
+          <button class="btn btn-outline btn-sm" onclick="IptablesApp.tplAddRule('suffix')">+ 添加</button>
+        </div>
+        <div id="tpl-suffix-list" class="tpl-rule-list"></div>
+      </section>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" onclick="IptablesApp.tplRestoreDefaults()">恢复默认模板</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-outline" onclick="IptablesApp.closeTemplate()">取消</button>
+      <button class="btn btn-primary" onclick="IptablesApp.tplSave()">保存模板</button>
+    </div>
+  </div>
+</div>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/ipcidr.js"></script>
+<script src="js/template.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/generate.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>
