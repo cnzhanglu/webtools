@@ -52,10 +52,24 @@
 
   <div class="panel preview-panel">
     <div class="panel-header">
-      <h2>GSLB 配置导出预览（最多 200 行）</h2>
+      <h2>GSLB 配置导出预览</h2>
       <span class="stat-badge" id="preview-badge">—</span>
     </div>
-    <div class="panel-body">
+    <div class="preview-toolbar">
+      <input type="search" id="filter-query" class="filter-input" placeholder="搜索域名 / 地址池 / 成员 / 任意字段…" autocomplete="off">
+      <select id="filter-scope" class="filter-select">
+        <option value="all">全部字段</option>
+        <option value="domain">仅域名</option>
+        <option value="pool">仅地址池</option>
+        <option value="member">仅成员</option>
+      </select>
+      <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
+      <div class="view-tabs">
+        <button class="view-tab active" id="tab-table" type="button">表格预览</button>
+        <button class="view-tab" id="tab-graph" type="button">关系图</button>
+      </div>
+    </div>
+    <div class="panel-body" id="view-table">
       <div class="preview-scroll">
         <table id="preview-table">
           <thead id="preview-head"></thead>
@@ -63,6 +77,20 @@
             <tr><td><span class="empty-hint" style="color:#999;padding:20px;display:block">导入 JSON 并点击「预览」查看数据</span></td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+    <div class="panel-body hidden" id="view-graph">
+      <div class="graph-toolbar">
+        <span class="stat-badge" id="graph-badge">—</span>
+        <button class="btn btn-outline btn-sm" id="btn-graph-reset" type="button">重置视图</button>
+      </div>
+      <div class="graph-layout">
+        <div class="graph-svg-wrap" id="graph-svg-wrap">
+          <div class="graph-empty">导入 JSON 并点击「预览」查看关系图</div>
+        </div>
+        <div class="graph-detail" id="graph-detail">
+          <div class="graph-detail-empty">点击节点查看完整参数</div>
+        </div>
       </div>
     </div>
   </div>
@@ -83,8 +111,9 @@
 1 支持域名、地址池、成员字段自由选择与排序
 2 支持字段方案记忆（自动记忆最近配置，保存在浏览器本地）
 3 支持高级字段：HMS、Pass、池启用、DC启用等
-4 支持预览最多 200 行数据，支持 Ctrl+C 复制选中行
-5 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
+4 支持全量预览与实时过滤，支持 Ctrl+C 复制选中行
+5 支持域名 → 地址池 → 服务成员 引用关系图，节点与连线展示关键参数
+6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 
 操作步骤：
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
@@ -115,6 +144,7 @@
 <script src="../../shared/js/utils.js"></script>
 <script src="js/fields.js"></script>
 <script src="js/process.js"></script>
+<script src="js/graph.js"></script>
 <script src="js/transfer.js"></script>
 <script src="js/app.js"></script>
 <script src="../../shared/js/pwa.js"></script>

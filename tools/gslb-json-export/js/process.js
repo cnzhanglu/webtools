@@ -306,6 +306,132 @@ var GslbProcess = (function () {
     return s;
   }
 
+  function pickScalarParams(obj, skipKeys) {
+    var params = {};
+    if (!obj || typeof obj !== 'object') return params;
+    var skip = skipKeys || {};
+    var k, v;
+    for (k in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+      if (skip[k]) continue;
+      v = obj[k];
+      if (isScalar(v)) params[k] = v;
+    }
+    return params;
+  }
+
+  function buildTopology(jsonData, dcMemberIndex) {
+    var empty = { domains: [], pools: [], members: [], edges: [] };
+    if (!jsonData || typeof jsonData !== 'object') return empty;
+
+    var addList = getAddList(jsonData);
+    var gpMap = buildGpoolMap(jsonData);
+    var domainMap = {};
+    var poolMap = {};
+    var memberMap = {};
+    var edges = [];
+    var edgeSeen = {};
+    var r, gpRefIdx, gmIdx, dom, gpRefs, gpRef, gpName, gpObj, members, gm;
+    var domName, poolId, memberId, edgeKey, k, v, dcName, gmemberName, dcGm;
+
+    function addEdge(from, to, kind, params) {
+      edgeKey = from + '\0' + to + '\0' + kind;
+      if (edgeSeen[edgeKey]) return;
+      edgeSeen[edgeKey] = true;
+      edges.push({ from: from, to: to, kind: kind, params: params || {} });
+    }
+
+    for (r = 0; r < addList.length; r++) {
+      dom = addList[r];
+      if (!dom || typeof dom !== 'object') continue;
+
+      domName = dom.name || ('domain_' + r);
+      if (!domainMap[domName]) {
+        domainMap[domName] = {
+          id: 'domain:' + domName,
+          name: domName,
+          params: pickScalarParams(dom, { gpool_list: true, alias_list: true })
+        };
+      }
+
+      gpRefs = dom.gpool_list;
+      if (!gpRefs || !gpRefs.length) continue;
+
+      for (gpRefIdx = 0; gpRefIdx < gpRefs.length; gpRefIdx++) {
+        gpRef = gpRefs[gpRefIdx];
+        if (!gpRef || typeof gpRef !== 'object') continue;
+
+        gpName = gpRef.gpool_name || '';
+        if (!gpName) continue;
+
+        poolId = 'pool:' + gpName;
+        if (!poolMap[poolId]) {
+          gpObj = gpMap[gpName] || {};
+          poolMap[poolId] = {
+            id: poolId,
+            name: gpName,
+            params: pickScalarParams(gpObj, { gmember_list: true })
+          };
+          if (Array.isArray(gpObj.hms)) {
+            poolMap[poolId].params.hms = normalizeHmsList(gpObj.hms);
+          }
+        }
+
+        addEdge('domain:' + domName, poolId, 'domain-pool', pickScalarParams(gpRef));
+
+        gpObj = gpMap[gpName] || {};
+        members = (gpObj && typeof gpObj === 'object') ? (gpObj.gmember_list || []) : [];
+        for (gmIdx = 0; gmIdx < members.length; gmIdx++) {
+          gm = members[gmIdx];
+          if (!gm || typeof gm !== 'object') continue;
+
+          dcName = gm.dc_name || '';
+          gmemberName = gm.gmember_name || '';
+          memberId = 'member:' + dcName + '\0' + gmemberName + '\0' + (gm.ip || '');
+
+          if (!memberMap[memberId]) {
+            dcGm = dcMemberIndex[dcName + '\0' + gmemberName] || {};
+            memberMap[memberId] = {
+              id: memberId,
+              label: gmemberName || gm.ip || '成员',
+              params: pickScalarParams(gm)
+            };
+            if (gm.enable !== undefined) memberMap[memberId].params.pool_enable = gm.enable;
+            if (Array.isArray(dcGm.hms)) {
+              memberMap[memberId].params.dc_hms = normalizeHmsList(dcGm.hms);
+            }
+            if (isScalar(dcGm.pass)) memberMap[memberId].params.dc_pass = dcGm.pass;
+            if (isScalar(dcGm.enable)) memberMap[memberId].params.enable = dcGm.enable;
+          }
+
+          addEdge(poolId, memberId, 'pool-member', {
+            port: gm.port !== undefined && gm.port !== null ? gm.port : '',
+            pool_enable: gm.enable !== undefined && gm.enable !== null ? gm.enable : ''
+          });
+        }
+      }
+    }
+
+    var domains = [];
+    var pools = [];
+    var members = [];
+    for (k in domainMap) {
+      if (Object.prototype.hasOwnProperty.call(domainMap, k)) domains.push(domainMap[k]);
+    }
+    for (k in poolMap) {
+      if (Object.prototype.hasOwnProperty.call(poolMap, k)) pools.push(poolMap[k]);
+    }
+    for (k in memberMap) {
+      if (Object.prototype.hasOwnProperty.call(memberMap, k)) members.push(memberMap[k]);
+    }
+
+    domains.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    pools.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    members.sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+
+    return { domains: domains, pools: pools, members: members, edges: edges };
+  }
+
   function buildCsvContent(columns, rows) {
     var lines = [];
     var header = [];
@@ -331,6 +457,7 @@ var GslbProcess = (function () {
     buildDcMemberIndex: buildDcMemberIndex,
     collectAvailableFields: collectAvailableFields,
     buildAddRows: buildAddRows,
+    buildTopology: buildTopology,
     buildCsvContent: buildCsvContent
   };
 })();
