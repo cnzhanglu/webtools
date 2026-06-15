@@ -1,5 +1,10 @@
 /**
- * Punycode 域名编解码 — UI
+ * Punycode 域名编解码 — UI 交互层
+ *
+ * 数据流：多行域名 → BocPunycode.autoConvert / encodeDomain / decodeDomain
+ *        → 结果表；支持将输出回填输入区便于链式转换。
+ *
+ * 依赖：BocUtils、BocPunycode
  */
 var PunycodeApp = (function () {
   'use strict';

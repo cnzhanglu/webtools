@@ -1,5 +1,12 @@
 /**
- * GSLB JSON 导出 — UI 交互
+ * GSLB JSON 导出 — UI 交互层
+ *
+ * 数据流：
+ *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 预览表（分批渲染）
+ *   → 可选关系图 / CSV 导出（UTF-8 BOM）
+ *
+ * 模块分工：GslbFields（方案）、GslbTransfer（选列）、GslbProcess（行数据）、
+ *          GslbGraph（拓扑图）、BocUtils（下载）
  */
 var GslbApp = (function () {
   'use strict';

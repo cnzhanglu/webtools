@@ -1,5 +1,12 @@
 /**
- * 子网计算核心逻辑
+ * 子网计算器 — 核心计算逻辑
+ *
+ * 根据解析后的网络地址与前缀，计算：
+ *   网络地址、广播地址、掩码、通配符掩码、可用主机数、首尾主机、CIDR
+ * IPv4 /31、/32 与 IPv6 /127、/128 按 RFC 特殊规则处理主机范围。
+ *
+ * 依赖：SubnetCalcIp
+ * 导出：SubnetCalcCore
  */
 var SubnetCalcCore = (function () {
   'use strict';
@@ -38,6 +45,7 @@ var SubnetCalcCore = (function () {
     return { count: c6 - 2n, display: formatBigInt(c6 - 2n) };
   }
 
+  /** 由地址与前缀计算网络边界、主机范围等展示字段 */
   function calc(parsed) {
     if (!parsed || parsed.error) return parsed;
 

@@ -1,6 +1,10 @@
 /**
- * Punycode 实现 — RFC 3492 (Bootstring) + RFC 3490 (IDNA)
- * 纯 JS，无外部依赖
+ * Punycode 域名编解码 — RFC 3492 Bootstring 实现（核心逻辑层）
+ *
+ * 按域名标签（点分隔）独立编码/解码；含非 ASCII 的标签加 xn-- 前缀。
+ * autoConvert 根据是否含 xn-- 或非 ASCII 自动判断编码或解码方向。
+ *
+ * 导出：BocPunycode
  */
 var BocPunycode = (function () {
   'use strict';

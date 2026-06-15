@@ -1,6 +1,13 @@
 /**
  * 纯 JS xlsx 生成器（STORED / 不压缩，无外部依赖）
- * 用法：BocXlsx.generate(rows, { sheetName, headers, rowMapper })
+ *
+ * 实现原理：手写 OOXML（sheet/workbook/styles）+ ZIP 封装（本地 CRC32），
+ * 不依赖 SheetJS 等第三方库，满足离线 file:// 约束。
+ *
+ * 数据流：工具传入 rows + rowMapper → 生成 XML 片段 → buildZip 打包 → Uint8Array
+ * 用法：BocXlsx.generate(rows, { sheetName, headers, colWidths, rowMapper })
+ *
+ * 导出：BocXlsx
  */
 var BocXlsx = (function () {
   'use strict';

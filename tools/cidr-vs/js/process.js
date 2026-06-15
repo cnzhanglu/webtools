@@ -1,5 +1,12 @@
 /**
- * CIDR 网段对比 — 输入解析与覆盖判定
+ * CIDR 网段对比 — 输入解析与覆盖判定（核心逻辑层）
+ *
+ * 算法：清单 A 为「基准覆盖集」，清单 B 为「待检集」。
+ * 对 B 中每条记录，在 A 中找同协议族且区间完全包含它的条目；
+ * 多条匹配时取区间最小（最具体）的 A 网段作为 matched。
+ *
+ * 依赖：BocIpCidr（parseEntry、subnetContains、formatCidr）
+ * 导出：CidrVsProcess
  */
 var CidrVsProcess = (function () {
   'use strict';
@@ -51,6 +58,7 @@ var CidrVsProcess = (function () {
     for (var i = 0; i < bResult.entries.length; i++) {
       var b = bResult.entries[i];
       var best = null;
+      // 在 A 清单中寻找能完全包含 b 的最具体（区间最小）网段
       for (var j = 0; j < aEntries.length; j++) {
         var a = aEntries[j];
         if (a.family !== b.family) continue;

@@ -1,5 +1,13 @@
 /**
- * Base64 编解码工具 — 支持文本与大文件（>5 MB）
+ * Base64 编解码工具 — 逻辑与 UI 合一
+ *
+ * 三种模式（标签页）：
+ *   文本：TextEncoder/Decoder + btoa/atob
+ *   文件编码：FileReader 读 ArrayBuffer → 分块 uint8ToBase64（避免大数组栈溢出）
+ *   文件解码：Base64 文本 → Uint8Array → downloadBlob 还原文件
+ *
+ * 依赖：BocUtils
+ * 导出：Base64App
  */
 var Base64App = (function () {
   'use strict';

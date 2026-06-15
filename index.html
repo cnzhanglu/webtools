@@ -63,6 +63,10 @@
 
 <script src="shared/js/tools-registry.js"></script>
 <script>
+/**
+ * 首页工具列表渲染
+ * 读取 BocToolRegistry，为每条工具生成可点击卡片；status !== 'ready' 时禁用链接。
+ */
 (function () {
   var grid = document.getElementById('tool-grid');
 

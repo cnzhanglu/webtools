@@ -1,5 +1,13 @@
 /**
- * 工具箱注册表 — 新增工具时在此追加条目即可
+ * 工具箱注册表 — 首页工具卡片的数据源
+ *
+ * 首页 index.html 遍历本数组渲染 tool-grid；新增工具时在此追加条目即可，
+ * 无需修改首页逻辑。字段说明：
+ *   id          工具目录名（tools/<id>/）
+ *   path        入口 HTML 相对路径
+ *   status      'ready' 可点击，其他值显示「即将上线」并禁用
+ *
+ * 导出：BocToolRegistry（全局数组）
  */
 var BocToolRegistry = [
   {

@@ -1,5 +1,15 @@
 /**
- * URL 编解码工具
+ * URL 编解码工具 — 逻辑与 UI 合一
+ *
+ * 三种编码模式：
+ *   component → encodeURIComponent（最严格，编码 URI 组件）
+ *   full      → encodeURI（保留 : / ? # 等 URI 结构字符）
+ *   form      → encodeURIComponent 后将 %20 换为 +（表单提交风格）
+ *
+ * 单行模式带差异高亮；批量模式按行独立编解码，错误行内标注。
+ *
+ * 依赖：BocUtils
+ * 导出：UrlCodecApp
  */
 var UrlCodecApp = (function () {
   'use strict';

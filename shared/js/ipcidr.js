@@ -3,8 +3,9 @@
  *
  * 统一以 BigInt 表示地址，family = 4 (IPv4, 32 bit) 或 6 (IPv6, 128 bit)。
  * 支持三种输入格式：单 IP、CIDR、IP 范围（a-b）。
- * 提供覆盖判定与严格 / 宽松两种网段合并算法。
+ * 提供覆盖判定（subnetContains）与严格 / 宽松两种网段合并算法。
  *
+ * 被 cidr-vs、net-summary、iptables-gen 等工具复用。
  * 导出：BocIpCidr
  */
 var BocIpCidr = (function () {

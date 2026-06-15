@@ -1,5 +1,10 @@
 /**
- * CIDR 网段对比 — UI 交互
+ * CIDR 网段对比 — UI 交互层
+ *
+ * 数据流：双栏文本 / 文件加载 → CidrVsProcess.compare
+ *        → 错误区 + 结果表（已覆盖/未覆盖着色）→ 复制 / xlsx
+ *
+ * 依赖：BocUtils、BocXlsx、CidrVsProcess
  */
 var CidrVsApp = (function () {
   'use strict';
