@@ -10,10 +10,17 @@ var GslbApp = (function () {
   var dcMemberIndex = {};
   var previewColumns = [];
   var previewRows = [];
+  var previewTopology = null;
+  var filterState = { query: '', scope: 'all' };
+  var activeView = 'table';
+  var renderToken = 0;
+  var filterTimer = null;
 
   var groupDomain = null;
   var groupPool = null;
   var groupMember = null;
+
+  var BATCH_SIZE = 180;
 
   function init() {
     pref = GslbFields.loadPref();
@@ -64,6 +71,16 @@ var GslbApp = (function () {
       refreshFieldLists();
     });
 
+    document.getElementById('filter-query').addEventListener('input', onFilterInput);
+    document.getElementById('filter-scope').addEventListener('change', onFilterChange);
+    document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
+
+    document.getElementById('tab-table').addEventListener('click', function () { setActiveView('table'); });
+    document.getElementById('tab-graph').addEventListener('click', function () { setActiveView('graph'); });
+    document.getElementById('btn-graph-reset').addEventListener('click', function () {
+      GslbGraph.resetView();
+    });
+
     document.addEventListener('keydown', function (e) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         var table = document.getElementById('preview-table');
@@ -82,6 +99,163 @@ var GslbApp = (function () {
     document.getElementById('status-text').textContent = text;
   }
 
+  function getFilterState() {
+    return {
+      query: filterState.query,
+      scope: filterState.scope
+    };
+  }
+
+  function onFilterInput() {
+    filterState.query = document.getElementById('filter-query').value;
+    if (filterTimer) clearTimeout(filterTimer);
+    filterTimer = setTimeout(function () {
+      applyFilterAndRender();
+    }, 200);
+  }
+
+  function onFilterChange() {
+    filterState.scope = document.getElementById('filter-scope').value;
+    applyFilterAndRender();
+  }
+
+  function clearFilter() {
+    filterState.query = '';
+    filterState.scope = 'all';
+    document.getElementById('filter-query').value = '';
+    document.getElementById('filter-scope').value = 'all';
+    applyFilterAndRender();
+  }
+
+  function setActiveView(view) {
+    activeView = view;
+    document.getElementById('tab-table').classList.toggle('active', view === 'table');
+    document.getElementById('tab-graph').classList.toggle('active', view === 'graph');
+    document.getElementById('view-table').classList.toggle('hidden', view !== 'table');
+    document.getElementById('view-graph').classList.toggle('hidden', view !== 'graph');
+    if (view === 'graph' && previewTopology) {
+      GslbGraph.render(previewTopology, getFilterState());
+    }
+  }
+
+  function filterRows(rows, query, scope, columns) {
+    if (!query) return rows;
+    var q = query.toLowerCase();
+    var filtered = [];
+    var r, c, col, val, prefixMatch;
+
+    for (r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      var matched = false;
+      for (c = 0; c < columns.length; c++) {
+        col = columns[c];
+        if (scope === 'domain' && col.indexOf('domain.') !== 0) continue;
+        if (scope === 'pool' && col.indexOf('pool.') !== 0) continue;
+        if (scope === 'member' && col.indexOf('member.') !== 0) continue;
+        val = row[col];
+        if (val !== null && val !== undefined && String(val).toLowerCase().indexOf(q) !== -1) {
+          matched = true;
+          break;
+        }
+      }
+      if (matched) filtered.push(row);
+    }
+    return filtered;
+  }
+
+  function updatePreviewBadge(shown, total) {
+    var badge = document.getElementById('preview-badge');
+    if (!badge) return;
+    if (filterState.query && shown !== total) {
+      badge.textContent = '显示 ' + shown + ' / 共 ' + total + ' 行';
+    } else {
+      badge.textContent = '共 ' + total + ' 行';
+    }
+  }
+
+  function renderPreviewTable(rows) {
+    var columns = previewColumns;
+    var thead = document.getElementById('preview-head');
+    var tbody = document.getElementById('preview-body');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+
+    if (!columns.length) {
+      tbody.innerHTML = '<tr><td><span class="empty-hint">未选择任何字段</span></td></tr>';
+      updatePreviewBadge(0, previewRows.length);
+      return;
+    }
+
+    var trHead = document.createElement('tr');
+    var i, c;
+    for (i = 0; i < columns.length; i++) {
+      var th = document.createElement('th');
+      th.textContent = GslbFields.keyToCn(columns[i]);
+      trHead.appendChild(th);
+    }
+    thead.appendChild(trHead);
+
+    if (!rows.length) {
+      var emptyTr = document.createElement('tr');
+      var emptyTd = document.createElement('td');
+      emptyTd.colSpan = columns.length;
+      emptyTd.innerHTML = '<span class="empty-hint">无匹配数据，请调整过滤条件</span>';
+      emptyTr.appendChild(emptyTd);
+      tbody.appendChild(emptyTr);
+      updatePreviewBadge(0, previewRows.length);
+      return;
+    }
+
+    var token = ++renderToken;
+    var idx = 0;
+
+    function renderBatch() {
+      if (token !== renderToken) return;
+      var end = Math.min(idx + BATCH_SIZE, rows.length);
+      for (; idx < end; idx++) {
+        var tr = document.createElement('tr');
+        for (c = 0; c < columns.length; c++) {
+          var td = document.createElement('td');
+          var val = rows[idx][columns[c]];
+          td.textContent = val === null || val === undefined ? '' : String(val);
+          td.title = td.textContent;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      if (idx < rows.length) {
+        requestAnimationFrame(renderBatch);
+      }
+    }
+
+    if (rows.length <= BATCH_SIZE) {
+      for (i = 0; i < rows.length; i++) {
+        var tr = document.createElement('tr');
+        for (c = 0; c < columns.length; c++) {
+          var td = document.createElement('td');
+          var val = rows[i][columns[c]];
+          td.textContent = val === null || val === undefined ? '' : String(val);
+          td.title = td.textContent;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+    } else {
+      requestAnimationFrame(renderBatch);
+    }
+
+    updatePreviewBadge(rows.length, previewRows.length);
+  }
+
+  function applyFilterAndRender() {
+    if (!previewRows.length && !previewTopology) return;
+    var filtered = filterRows(previewRows, filterState.query, filterState.scope, previewColumns);
+    renderPreviewTable(filtered);
+    if (previewTopology) {
+      GslbGraph.render(previewTopology, getFilterState());
+    }
+  }
+
   function onFileSelected(e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -97,6 +271,8 @@ var GslbApp = (function () {
       }
       dcMemberIndex = GslbProcess.buildDcMemberIndex(jsonData);
       availableFields = GslbProcess.collectAvailableFields(jsonData, dcMemberIndex);
+      previewRows = [];
+      previewTopology = null;
       setStatus('状态：已加载文件 ' + file.name);
       refreshFieldLists();
     };
@@ -207,38 +383,11 @@ var GslbApp = (function () {
 
     previewColumns = columns;
     previewRows = rows;
+    previewTopology = GslbProcess.buildTopology(jsonData, dcMemberIndex);
 
-    var thead = document.getElementById('preview-head');
-    var tbody = document.getElementById('preview-body');
-    thead.innerHTML = '';
-    tbody.innerHTML = '';
-
-    var trHead = document.createElement('tr');
-    var i, c;
-    for (i = 0; i < columns.length; i++) {
-      var th = document.createElement('th');
-      th.textContent = GslbFields.keyToCn(columns[i]);
-      trHead.appendChild(th);
-    }
-    thead.appendChild(trHead);
-
-    var limit = Math.min(rows.length, 200);
-    for (i = 0; i < limit; i++) {
-      var tr = document.createElement('tr');
-      for (c = 0; c < columns.length; c++) {
-        var td = document.createElement('td');
-        var val = rows[i][columns[c]];
-        td.textContent = val === null || val === undefined ? '' : String(val);
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    }
-
-    var badge = document.getElementById('preview-badge');
-    if (rows.length > 200) {
-      badge.textContent = '显示前 200 行 / 共 ' + rows.length + ' 行';
-    } else {
-      badge.textContent = '共 ' + rows.length + ' 行';
+    applyFilterAndRender();
+    if (activeView === 'graph') {
+      GslbGraph.render(previewTopology, getFilterState());
     }
   }
 
