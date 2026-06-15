@@ -10,7 +10,7 @@ var GslbApp = (function () {
   var dcMemberIndex = {};
   var previewColumns = [];
   var previewRows = [];
-  var previewTopology = null;
+  var selectedDomainName = '';
   var filterState = { query: '', scope: 'all' };
   var activeView = 'table';
   var renderToken = 0;
@@ -77,6 +77,7 @@ var GslbApp = (function () {
 
     document.getElementById('tab-table').addEventListener('click', function () { setActiveView('table'); });
     document.getElementById('tab-graph').addEventListener('click', function () { setActiveView('graph'); });
+    document.getElementById('btn-view-graph').addEventListener('click', viewSelectedDomainGraph);
     document.getElementById('btn-graph-reset').addEventListener('click', function () {
       GslbGraph.resetView();
     });
@@ -92,6 +93,7 @@ var GslbApp = (function () {
     });
 
     refreshFieldLists();
+    updateViewGraphButton();
     setStatus('状态：尚未加载 JSON');
   }
 
@@ -99,11 +101,15 @@ var GslbApp = (function () {
     document.getElementById('status-text').textContent = text;
   }
 
-  function getFilterState() {
-    return {
-      query: filterState.query,
-      scope: filterState.scope
-    };
+  function updateViewGraphButton() {
+    var btn = document.getElementById('btn-view-graph');
+    if (!btn) return;
+    btn.disabled = !selectedDomainName;
+    if (selectedDomainName) {
+      btn.title = '查看域名「' + selectedDomainName + '」的引用关系图';
+    } else {
+      btn.title = '请先在表格中点击一行选择域名';
+    }
   }
 
   function onFilterInput() {
@@ -133,16 +139,33 @@ var GslbApp = (function () {
     document.getElementById('tab-graph').classList.toggle('active', view === 'graph');
     document.getElementById('view-table').classList.toggle('hidden', view !== 'table');
     document.getElementById('view-graph').classList.toggle('hidden', view !== 'graph');
-    if (view === 'graph' && previewTopology) {
-      GslbGraph.render(previewTopology, getFilterState());
+    if (view === 'graph') {
+      renderDomainGraph(selectedDomainName);
     }
+  }
+
+  function renderDomainGraph(domainName) {
+    if (!jsonData || !domainName) {
+      GslbGraph.render(null, null, domainName);
+      return;
+    }
+    var topology = GslbProcess.buildTopology(jsonData, dcMemberIndex, domainName);
+    GslbGraph.render(topology, null, domainName);
+  }
+
+  function viewSelectedDomainGraph() {
+    if (!selectedDomainName) {
+      alert('请先在表格中点击一行选择域名。');
+      return;
+    }
+    setActiveView('graph');
   }
 
   function filterRows(rows, query, scope, columns) {
     if (!query) return rows;
     var q = query.toLowerCase();
     var filtered = [];
-    var r, c, col, val, prefixMatch;
+    var r, c, col, val;
 
     for (r = 0; r < rows.length; r++) {
       var row = rows[r];
@@ -173,6 +196,21 @@ var GslbApp = (function () {
     }
   }
 
+  function appendTableRow(tbody, row, columns) {
+    var tr = document.createElement('tr');
+    var domainName = row._domainName || row['domain.name'] || '';
+    if (domainName) tr.setAttribute('data-domain', domainName);
+    var c;
+    for (c = 0; c < columns.length; c++) {
+      var td = document.createElement('td');
+      var val = row[columns[c]];
+      td.textContent = val === null || val === undefined ? '' : String(val);
+      td.title = td.textContent;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
   function renderPreviewTable(rows) {
     var columns = previewColumns;
     var thead = document.getElementById('preview-head');
@@ -187,7 +225,7 @@ var GslbApp = (function () {
     }
 
     var trHead = document.createElement('tr');
-    var i, c;
+    var i;
     for (i = 0; i < columns.length; i++) {
       var th = document.createElement('th');
       th.textContent = GslbFields.keyToCn(columns[i]);
@@ -213,33 +251,20 @@ var GslbApp = (function () {
       if (token !== renderToken) return;
       var end = Math.min(idx + BATCH_SIZE, rows.length);
       for (; idx < end; idx++) {
-        var tr = document.createElement('tr');
-        for (c = 0; c < columns.length; c++) {
-          var td = document.createElement('td');
-          var val = rows[idx][columns[c]];
-          td.textContent = val === null || val === undefined ? '' : String(val);
-          td.title = td.textContent;
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
+        appendTableRow(tbody, rows[idx], columns);
       }
       if (idx < rows.length) {
         requestAnimationFrame(renderBatch);
+      } else {
+        restoreRowSelection();
       }
     }
 
     if (rows.length <= BATCH_SIZE) {
       for (i = 0; i < rows.length; i++) {
-        var tr = document.createElement('tr');
-        for (c = 0; c < columns.length; c++) {
-          var td = document.createElement('td');
-          var val = rows[i][columns[c]];
-          td.textContent = val === null || val === undefined ? '' : String(val);
-          td.title = td.textContent;
-          tr.appendChild(td);
-        }
-        tbody.appendChild(tr);
+        appendTableRow(tbody, rows[i], columns);
       }
+      restoreRowSelection();
     } else {
       requestAnimationFrame(renderBatch);
     }
@@ -247,13 +272,41 @@ var GslbApp = (function () {
     updatePreviewBadge(rows.length, previewRows.length);
   }
 
+  function restoreRowSelection() {
+    if (!selectedDomainName) return;
+    var tbody = document.getElementById('preview-body');
+    var trs = tbody.querySelectorAll('tr[data-domain]');
+    var i;
+    for (i = 0; i < trs.length; i++) {
+      if (trs[i].getAttribute('data-domain') === selectedDomainName) {
+        trs[i].classList.add('selected');
+        break;
+      }
+    }
+  }
+
+  function selectDomainFromRow(tr) {
+    var domainName = tr.getAttribute('data-domain') || '';
+    if (!domainName) return;
+
+    selectedDomainName = domainName;
+    updateViewGraphButton();
+
+    var tbody = document.getElementById('preview-body');
+    var rows = tbody.querySelectorAll('tr.selected');
+    var i;
+    for (i = 0; i < rows.length; i++) rows[i].classList.remove('selected');
+    tr.classList.add('selected');
+
+    if (activeView === 'graph') {
+      renderDomainGraph(selectedDomainName);
+    }
+  }
+
   function applyFilterAndRender() {
-    if (!previewRows.length && !previewTopology) return;
+    if (!previewRows.length) return;
     var filtered = filterRows(previewRows, filterState.query, filterState.scope, previewColumns);
     renderPreviewTable(filtered);
-    if (previewTopology) {
-      GslbGraph.render(previewTopology, getFilterState());
-    }
   }
 
   function onFileSelected(e) {
@@ -272,7 +325,9 @@ var GslbApp = (function () {
       dcMemberIndex = GslbProcess.buildDcMemberIndex(jsonData);
       availableFields = GslbProcess.collectAvailableFields(jsonData, dcMemberIndex);
       previewRows = [];
-      previewTopology = null;
+      selectedDomainName = '';
+      updateViewGraphButton();
+      GslbGraph.render(null, null, '');
       setStatus('状态：已加载文件 ' + file.name);
       refreshFieldLists();
     };
@@ -383,12 +438,12 @@ var GslbApp = (function () {
 
     previewColumns = columns;
     previewRows = rows;
-    previewTopology = GslbProcess.buildTopology(jsonData, dcMemberIndex);
+    selectedDomainName = '';
+    updateViewGraphButton();
 
     applyFilterAndRender();
-    if (activeView === 'graph') {
-      GslbGraph.render(previewTopology, getFilterState());
-    }
+    setActiveView('table');
+    GslbGraph.render(null, null, '');
   }
 
   function copySelection() {
@@ -465,15 +520,28 @@ var GslbApp = (function () {
     var tbody = document.getElementById('preview-body');
     tbody.addEventListener('click', function (e) {
       var tr = e.target.closest('tr');
-      if (!tr || !tbody.contains(tr)) return;
+      if (!tr || !tbody.contains(tr) || !tr.getAttribute('data-domain')) return;
+
       if (e.ctrlKey || e.metaKey) {
         tr.classList.toggle('selected');
-      } else {
-        var rows = tbody.querySelectorAll('tr.selected');
-        var i;
-        for (i = 0; i < rows.length; i++) rows[i].classList.remove('selected');
-        tr.classList.add('selected');
+        if (tr.classList.contains('selected')) {
+          selectDomainFromRow(tr);
+        } else if (selectedDomainName === tr.getAttribute('data-domain')) {
+          selectedDomainName = '';
+          updateViewGraphButton();
+          if (activeView === 'graph') GslbGraph.render(null, null, '');
+        }
+        return;
       }
+
+      selectDomainFromRow(tr);
+    });
+
+    tbody.addEventListener('dblclick', function (e) {
+      var tr = e.target.closest('tr');
+      if (!tr || !tbody.contains(tr) || !tr.getAttribute('data-domain')) return;
+      selectDomainFromRow(tr);
+      viewSelectedDomainGraph();
     });
   }
 

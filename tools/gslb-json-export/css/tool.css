@@ -232,6 +232,11 @@
   background: #dbeafe;
 }
 
+#btn-view-graph:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .empty-hint {
   color: #999;
   padding: 20px;

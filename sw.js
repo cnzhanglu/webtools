@@ -5,7 +5,7 @@
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  */
-var CACHE_VERSION = 'webtools-v11';
+var CACHE_VERSION = 'webtools-v12';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [

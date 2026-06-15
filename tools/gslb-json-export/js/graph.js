@@ -500,28 +500,36 @@ var GslbGraph = (function () {
     applyHighlight();
   }
 
-  function render(topology, filterState) {
+  function render(topology, filterState, domainName) {
     currentTopology = topology;
-    if (!topology) {
-      var wrap = document.getElementById('graph-svg-wrap');
-      if (wrap) wrap.innerHTML = '<div class="graph-empty">导入 JSON 并点击「预览」查看关系图</div>';
+    var wrap = document.getElementById('graph-svg-wrap');
+    if (!wrap) return;
+
+    if (!topology || !domainName) {
+      wrap.innerHTML = '<div class="graph-empty">在表格中点击一行选择域名，再点击「查看关系图」或双击行查看该域名的引用关系</div>';
       renderDetail(null);
+      var badgeEmpty = document.getElementById('graph-badge');
+      if (badgeEmpty) badgeEmpty.textContent = '—';
       return;
     }
 
-    var filtered = filterTopology(topology, filterState || {});
-    var layout = computeLayout(filtered);
+    if (!topology.domains.length) {
+      wrap.innerHTML = '<div class="graph-empty">域名「' + escText(domainName) + '」无地址池引用或数据不存在</div>';
+      renderDetail(null);
+      var badgeNone = document.getElementById('graph-badge');
+      if (badgeNone) badgeNone.textContent = domainName + ' · 无引用';
+      return;
+    }
+
+    panZoom = { x: 0, y: 0, scale: 1 };
+    resetView();
+    var layout = computeLayout(topology);
     renderSvg(layout);
 
     var badge = document.getElementById('graph-badge');
     if (badge) {
-      var total = topology.domains.length + topology.pools.length + topology.members.length;
-      var shown = filtered.domains.length + filtered.pools.length + filtered.members.length;
-      if (filterState && filterState.query) {
-        badge.textContent = '显示 ' + shown + ' / 共 ' + total + ' 节点';
-      } else {
-        badge.textContent = '共 ' + total + ' 节点 · ' + topology.edges.length + ' 条引用';
-      }
+      var nodeCount = topology.domains.length + topology.pools.length + topology.members.length;
+      badge.textContent = domainName + ' · ' + nodeCount + ' 节点 · ' + topology.edges.length + ' 条引用';
     }
   }
 

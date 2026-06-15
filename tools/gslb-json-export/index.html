@@ -64,6 +64,7 @@
         <option value="member">仅成员</option>
       </select>
       <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
+      <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
       <div class="view-tabs">
         <button class="view-tab active" id="tab-table" type="button">表格预览</button>
         <button class="view-tab" id="tab-graph" type="button">关系图</button>
@@ -86,7 +87,7 @@
       </div>
       <div class="graph-layout">
         <div class="graph-svg-wrap" id="graph-svg-wrap">
-          <div class="graph-empty">导入 JSON 并点击「预览」查看关系图</div>
+          <div class="graph-empty">在表格中点击一行选择域名，再点击「查看关系图」或双击行查看该域名的引用关系</div>
         </div>
         <div class="graph-detail" id="graph-detail">
           <div class="graph-detail-empty">点击节点查看完整参数</div>
@@ -112,14 +113,14 @@
 2 支持字段方案记忆（自动记忆最近配置，保存在浏览器本地）
 3 支持高级字段：HMS、Pass、池启用、DC启用等
 4 支持全量预览与实时过滤，支持 Ctrl+C 复制选中行
-5 支持域名 → 地址池 → 服务成员 引用关系图，节点与连线展示关键参数
+5 点击表格行选择域名，再查看该域名的「域名 → 地址池 → 服务成员」引用关系图（节点与连线展示关键参数）
 6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 
 操作步骤：
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
 2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件
 3. 在字段配置区选择需要导出的字段，可排序
-4. 点击「预览」查看效果
+4. 点击「预览」查看表格；点击某行选择域名，再点「查看关系图」或双击行查看引用拓扑
 5. 点击「导出 CSV」生成文件
 
 导出说明：
