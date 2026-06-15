@@ -80,6 +80,16 @@ var GslbGraph = (function () {
     return out;
   }
 
+  function pickNodeDisplayLines(node) {
+    if (node.type === 'domain') {
+      return pickDisplayParams(node.params, ['algorithm', 'enable', 'status']);
+    }
+    if (node.type === 'pool') {
+      return pickDisplayParams(node.params, ['first_algorithm', 'second_algorithm', 'enable']);
+    }
+    return pickDisplayParams(node.params, ['ip', 'port', 'enable']);
+  }
+
   function nodeMatchesQuery(node, query) {
     if (!query) return true;
     var q = query.toLowerCase();
@@ -445,13 +455,7 @@ var GslbGraph = (function () {
       title.textContent = titleText;
       g.appendChild(title);
 
-      if (node.type === 'domain') {
-        params = pickDisplayParams(node.params, ['type', 'enable', 'status']);
-      } else if (node.type === 'pool') {
-        params = pickDisplayParams(node.params, ['type', 'enable', 'ttl']);
-      } else {
-        params = pickDisplayParams(node.params, ['ip', 'port', 'enable']);
-      }
+      params = pickNodeDisplayLines(node);
 
       for (j = 0; j < params.length && j < 3; j++) {
         sub = document.createElementNS(svgNs, 'text');
