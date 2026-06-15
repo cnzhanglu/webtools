@@ -1,5 +1,13 @@
 /**
- * 网络策略：输入解析与聚合处理
+ * 网络策略 — 输入解析与聚合处理（核心逻辑层）
+ *
+ * 数据流：
+ *   原始文本（每行「IP/CIDR + 端口」）
+ *     → parseInput 拆行、校验
+ *     → 按端口分组，同端口内 CIDR 聚合去重
+ *     → 按输出模式（按端口 / 压缩一行）与 maxAddr 拆分行
+ *
+ * 导出：NetPolicyProcess
  */
 var NetPolicyProcess = (function () {
   'use strict';
@@ -10,6 +18,7 @@ var NetPolicyProcess = (function () {
     return a.localeCompare(b);
   }
 
+  /** 解析多行输入，每行格式：地址 + 空白/逗号 + 端口 */
   function parseInput(raw) {
     var rows = [], errors = [];
     raw.split('\n').forEach(function (line, idx) {
@@ -31,6 +40,10 @@ var NetPolicyProcess = (function () {
     return { rows: rows, errors: errors };
   }
 
+  /**
+   * 聚合主入口
+   * @param oneLineMode true 时所有端口合并为一行，地址与端口各自去重排序
+   */
   function process(rawText, aggPrefixV4, aggPrefixV6, maxAddr, oneLineMode) {
     var parsed = parseInput(rawText);
     var rows   = parsed.rows;
@@ -39,6 +52,7 @@ var NetPolicyProcess = (function () {
     var portMap = new Map();
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
+      // 先聚合到用户指定的前缀，再按端口归入 Set 自动去重
       var aggCIDR = NetPolicyIp.aggregateCIDR(row.cidr, aggPrefixV4, aggPrefixV6);
       if (!portMap.has(row.port)) portMap.set(row.port, new Set());
       portMap.get(row.port).add(aggCIDR);
@@ -46,6 +60,7 @@ var NetPolicyProcess = (function () {
 
     var resultRows = [];
 
+    // —— 模式一：全部压缩为一行，地址与端口各自全局去重 ——
     if (oneLineMode) {
       var allAddrs = new Set();
       portMap.forEach(function (s) { s.forEach(function (a) { allAddrs.add(a); }); });
@@ -60,6 +75,7 @@ var NetPolicyProcess = (function () {
         resultRows.push({ addrs: sortedAddrs, ports: portStr });
       }
     } else {
+      // —— 模式二：按端口分组，每组内地址排序；超 maxAddr 时纵向拆行 ——
       var sortedPorts = Array.from(portMap.keys()).sort(comparePort);
       for (var p = 0; p < sortedPorts.length; p++) {
         var port  = sortedPorts[p];

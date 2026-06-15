@@ -1,9 +1,15 @@
 /**
  * 工具箱 Service Worker — 离线缓存（仅 HTTPS / HTTP 环境生效，file:// 不注册）
- * 新增工具时请将对应静态资源追加到 PRECACHE_URLS
+ *
+ * 生命周期：
+ *   install  → precacheAll 逐项 fetch 写入 PRECACHE_URLS（单条失败不影响整体）
+ *   activate → 删除旧版本 CACHE_NAME 以外的缓存
+ *   fetch    → 导航请求网络优先；静态资源缓存优先并后台更新
  *
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
+ *
+ * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
 var CACHE_VERSION = 'webtools-v13';
 var CACHE_NAME = CACHE_VERSION;
@@ -67,6 +73,7 @@ var PRECACHE_URLS = [
   './tools/iptables-gen/js/app.js',
 ];
 
+/** 逐项预缓存：避免 cache.addAll 因单条 307/404 导致整批失败 */
 function precacheAll(cache, urls) {
   return Promise.all(urls.map(function (url) {
     return fetch(url).then(function (response) {
@@ -79,6 +86,7 @@ function precacheAll(cache, urls) {
   }));
 }
 
+/** 离线导航回退：依次尝试目录 URL、尾斜杠变体、站点根 */
 function matchNavigateFallback(request) {
   var url = new URL(request.url);
   var path = url.pathname;

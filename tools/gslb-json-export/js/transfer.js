@@ -1,5 +1,10 @@
 /**
  * GSLB JSON 导出 — 字段穿梭框组件
+ *
+ * 左右双列表 + 中间按钮，管理「可选字段」与「已选导出字段」；
+ * 右侧支持拖拽排序。选中变化时通过 onChange 回调通知 app 刷新预览列。
+ *
+ * 导出：GslbTransfer（含 TransferGroup 构造函数）
  */
 var GslbTransfer = (function () {
   'use strict';

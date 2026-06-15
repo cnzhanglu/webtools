@@ -1,5 +1,16 @@
 /**
- * iptables 规则生成工具 — UI 交互（依赖 IptablesTemplate / Validate / Gen / Parse / Store / BocUtils）
+ * iptables 规则生成工具 — UI 交互层
+ *
+ * 项目模型：一个 JSON 文件 = 一个项目，含多设备；每设备独立 v4/v6 栈。
+ * 数据流：
+ *   UI 编辑（白名单 IP、开关、附加规则）→ syncFromUI 写回 project
+ *   → IptablesGen.generateStack 按模板顺序拼接规则
+ *   → IptablesValidate 校验 IP 与规则结构
+ *
+ * 另支持：模板编辑、现有规则导入（IptablesParse）、本地 JSON 存取（IptablesStore）
+ *
+ * 依赖：IptablesTemplate、IptablesGen、IptablesParse、IptablesValidate、
+ *       IptablesStore、BocUtils
  */
 var IptablesApp = (function () {
   'use strict';

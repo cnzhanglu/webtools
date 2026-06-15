@@ -1,5 +1,11 @@
 /**
- * IPv4 / IPv6 地址解析与 CIDR 聚合
+ * 网络策略工具 — IP/CIDR 解析与聚合（本工具专用，比 BocIpCidr 更轻量）
+ *
+ * 职责：将 IP 字符串解析为 { base, prefix, family }，并按用户指定的
+ * 聚合前缀（IPv4 默认 /24、IPv6 默认 /64）向下取整网段。
+ * 地址内部用 BigInt（v6）或 32 位整数（v4）表示，便于掩码运算。
+ *
+ * 导出：NetPolicyIp
  */
 var NetPolicyIp = (function () {
   'use strict';
@@ -127,6 +133,7 @@ var NetPolicyIp = (function () {
     return ipv6FromBigInt(cidr.base) + '/' + cidr.prefix;
   }
 
+  /** 将 CIDR 向下聚合到 aggPrefix（掩码变短、网段变大） */
   function aggregateCIDR(cidr, aggPrefixV4, aggPrefixV6) {
     var aggPrefix = cidr.family === 4 ? aggPrefixV4 : aggPrefixV6;
     var maxBits   = cidr.family === 4 ? 32 : 128;

@@ -38,6 +38,16 @@
 - `BocIpCidr` — IPv4/IPv6 地址、CIDR、范围解析与网段合并算法
 - `BocToolRegistry` — 工具列表数组
 
+## 代码注释规范
+
+与 [`.cursor/rules/webtools-framework.mdc`](../.cursor/rules/webtools-framework.mdc) 中「代码注释规范」章节一致。要点：
+
+- 所有 JS 用**中文**注释说明实现逻辑
+- 每个文件头写清：职责、依赖、数据流（输入 → 处理 → 输出）
+- 工具按 `process`（核心逻辑）与 `app`（UI 交互）分层注释
+- 算法、正则、位运算等非显而易见处须说明意图
+- 新增或修改代码时同步更新注释
+
 ## Git 分支与工作流
 
 - **main**：生产主线，仅接收已验证的合并，不直接开发

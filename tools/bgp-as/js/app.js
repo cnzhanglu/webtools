@@ -1,5 +1,12 @@
 /**
- * BGP AS 号格式转换
+ * BGP AS 号格式转换 — 逻辑与 UI 合一
+ *
+ * 支持十进制 ↔ ASDOT（X.Y，高 16 位.低 16 位）互转；
+ * parseAS 识别输入格式，asRange 标注 RFC 保留/私有/文档用 AS 号段。
+ * 批量模式按行处理，# 开头为注释行。
+ *
+ * 依赖：BocUtils
+ * 导出：BgpAsApp
  */
 var BgpAsApp = (function () {
   'use strict';

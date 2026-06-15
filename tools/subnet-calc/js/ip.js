@@ -1,5 +1,11 @@
 /**
- * IPv4 / IPv6 地址解析
+ * 子网计算器 — IPv4/IPv6 地址解析
+ *
+ * 职责：解析用户输入的网络表示（CIDR、点分掩码、空格分隔 IP+掩码），
+ * 输出统一的 { addr, prefix, family } 供 SubnetCalcCore.calc 计算。
+ * 掩码合法性通过「取反后为 2 的幂」校验（连续 1 前缀）。
+ *
+ * 导出：SubnetCalcIp
  */
 var SubnetCalcIp = (function () {
   'use strict';

@@ -1,5 +1,10 @@
 /**
- * 网段汇总 — UI 交互
+ * 网段汇总 — UI 交互层
+ *
+ * 数据流：文本/文件输入 → NetSummaryProcess.summarize
+ *        → 汇总表 + 报告区 + 来源明细折叠 → 复制 / xlsx
+ *
+ * 依赖：BocUtils、BocXlsx、NetSummaryProcess
  */
 var NetSummaryApp = (function () {
   'use strict';

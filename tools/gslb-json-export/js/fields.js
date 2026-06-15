@@ -1,5 +1,11 @@
 /**
- * GSLB JSON 导出 — 字段映射、方案与偏好存储
+ * GSLB JSON 导出 — 字段映射、预设方案与 localStorage 偏好
+ *
+ * FIELD_MAP：内部字段键（domain.xxx）→ 中文表头
+ * BASE_SCHEMES：「运维巡检」「排障分析」等预设的默认字段集合
+ * loadPref/savePref：记住上次方案与穿梭框选中项（localStorage）
+ *
+ * 导出：GslbFields
  */
 var GslbFields = (function () {
   'use strict';

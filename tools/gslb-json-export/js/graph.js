@@ -1,5 +1,11 @@
 /**
  * GSLB JSON 导出 — 域名 / 地址池 / 服务成员 引用关系图（纯 SVG）
+ *
+ * 将 buildTopology 返回的 nodes/edges 做三列布局（域 | 池 | 成员），
+ * 支持平移缩放、节点高亮、点击选中；不依赖外部图形库。
+ *
+ * 依赖：由 app.js 传入 topology 数据
+ * 导出：GslbGraph
  */
 var GslbGraph = (function () {
   'use strict';

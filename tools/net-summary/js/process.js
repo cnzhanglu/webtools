@@ -1,5 +1,12 @@
 /**
- * 网段汇总 — 输入解析与汇总
+ * 网段汇总 — 输入解析与合并（核心逻辑层）
+ *
+ * 数据流：多行 IP/CIDR/范围 → BocIpCidr.parseEntry
+ *        → mergeStrict（等长连续 CIDR 向上合并）或 mergeLoose（区间并集再拆 CIDR）
+ *        → 带来源映射的汇总行 + 超集校验（合并前后地址总数应一致）
+ *
+ * 依赖：BocIpCidr
+ * 导出：NetSummaryProcess
  */
 var NetSummaryProcess = (function () {
   'use strict';
@@ -47,8 +54,8 @@ var NetSummaryProcess = (function () {
     var entries = parsed.entries;
 
     var merged = mode === 'loose'
-      ? BocIpCidr.mergeLoose(entries)
-      : BocIpCidr.mergeStrict(entries);
+      ? BocIpCidr.mergeLoose(entries)   // 区间并集后拆成最小 CIDR
+      : BocIpCidr.mergeStrict(entries); // 仅合并等长、对齐、相邻的兄弟块
 
     var rows = merged.map(function (r, idx) {
       var sources = (r.sources || []).map(function (s) {

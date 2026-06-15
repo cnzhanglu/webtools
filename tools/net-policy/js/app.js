@@ -1,5 +1,10 @@
 /**
- * 网络策略工具 — UI 交互
+ * 网络策略工具 — UI 交互层
+ *
+ * 数据流：用户输入 → NetPolicyProcess.process() 聚合
+ *        → 渲染表格 + 错误提示 → lastResult 缓存 → 复制 / xlsx 导出
+ *
+ * 依赖：BocUtils、BocXlsx、NetPolicyProcess、NetPolicyIp
  */
 var NetPolicyApp = (function () {
   'use strict';

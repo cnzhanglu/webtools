@@ -1,5 +1,11 @@
 /**
- * 子网掩码计算器 — UI 交互
+ * 子网掩码计算器 — UI 交互层
+ *
+ * 数据流：输入框/滑块变更（防抖）→ SubnetCalcIp.parseNetworkInput
+ *        → SubnetCalcCore.calc → 增量更新结果表
+ * syncing 标志防止控件互相触发时的递归更新。
+ *
+ * 依赖：BocUtils、SubnetCalcIp、SubnetCalcCore
  */
 var SubnetCalcApp = (function () {
   'use strict';

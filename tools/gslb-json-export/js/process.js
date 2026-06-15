@@ -1,5 +1,17 @@
 /**
- * GSLB JSON 导出 — 数据解析与行构建
+ * GSLB JSON 导出 — 数据解析与行构建（核心逻辑层）
+ *
+ * GSLB 配置 JSON 结构：ADD（域名列表）→ gpool_list → gpool / gmember_list，
+ * 另通过 data_center 建立数据中心成员索引（dc_name + gmember_name → 详情）。
+ *
+ * 主要能力：
+ *   collectAvailableFields — 扫描 JSON 中出现过的可导出字段
+ *   buildAddRows — 按选定字段顺序展开为「域名×池×成员」扁平行
+ *   buildTopology — 构建域名-池-成员引用图（供关系图渲染）
+ *   buildCsvContent — 带 UTF-8 BOM 的 CSV 文本
+ *
+ * 依赖：GslbFields（字段名与中英文映射）
+ * 导出：GslbProcess
  */
 var GslbProcess = (function () {
   'use strict';
@@ -26,6 +38,7 @@ var GslbProcess = (function () {
     return '';
   }
 
+  /** 构建 data_center 下 gmember 的二级索引，键为「数据中心名 + 成员名」组合 */
   function buildDcMemberIndex(jsonData) {
     var index = {};
     if (!jsonData || typeof jsonData !== 'object') return index;
@@ -195,6 +208,10 @@ var GslbProcess = (function () {
     };
   }
 
+  /**
+   * 将 ADD 域名列表按「域名 × 地址池引用 × 池成员」笛卡尔展开为扁平行；
+   * 每行按 orders 中字段顺序填充，并附带 _domainName 供过滤/关系图使用。
+   */
   function buildAddRows(jsonData, orders, dcMemberIndex) {
     var rows = [];
     if (!jsonData || typeof jsonData !== 'object') return rows;

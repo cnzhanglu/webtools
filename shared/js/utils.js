@@ -1,5 +1,13 @@
 /**
  * 共享工具函数（无外部依赖）
+ *
+ * 被各工具 app.js 复用，提供：
+ *   - escHtml：渲染用户输入到 innerHTML 时防 XSS
+ *   - getSep / bindSepToggle：连接符下拉（换行/逗号/自定义）的读取与 UI 联动
+ *   - copyText：剪贴板写入（优先 Clipboard API，失败降级 execCommand）
+ *   - downloadBlob：触发浏览器文件下载
+ *
+ * 导出：BocUtils
  */
 var BocUtils = (function () {
   'use strict';
