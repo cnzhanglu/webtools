@@ -292,6 +292,7 @@ var GslbProcess = (function () {
           }
 
           rows.push(row);
+          row._domainName = dom.name || '';
         }
       }
     }
@@ -320,7 +321,7 @@ var GslbProcess = (function () {
     return params;
   }
 
-  function buildTopology(jsonData, dcMemberIndex) {
+  function buildTopology(jsonData, dcMemberIndex, domainName) {
     var empty = { domains: [], pools: [], members: [], edges: [] };
     if (!jsonData || typeof jsonData !== 'object') return empty;
 
@@ -333,6 +334,7 @@ var GslbProcess = (function () {
     var edgeSeen = {};
     var r, gpRefIdx, gmIdx, dom, gpRefs, gpRef, gpName, gpObj, members, gm;
     var domName, poolId, memberId, edgeKey, k, v, dcName, gmemberName, dcGm;
+    var onlyDomain = domainName ? String(domainName) : '';
 
     function addEdge(from, to, kind, params) {
       edgeKey = from + '\0' + to + '\0' + kind;
@@ -346,6 +348,7 @@ var GslbProcess = (function () {
       if (!dom || typeof dom !== 'object') continue;
 
       domName = dom.name || ('domain_' + r);
+      if (onlyDomain && domName !== onlyDomain) continue;
       if (!domainMap[domName]) {
         domainMap[domName] = {
           id: 'domain:' + domName,
