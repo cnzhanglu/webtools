@@ -471,12 +471,85 @@ var GslbProcess = (function () {
     return lines.join('\r\n');
   }
 
+  function buildDomainListRows(jsonData) {
+    var rows = [];
+    if (!jsonData || typeof jsonData !== 'object') return rows;
+
+    var addList = getAddList(jsonData);
+    var gpMap = buildGpoolMap(jsonData);
+    var domainMap = {};
+    var i, j, k;
+
+    for (i = 0; i < addList.length; i++) {
+      var dom = addList[i];
+      if (!dom || typeof dom !== 'object') continue;
+      var domainName = dom.name || '';
+      if (!domainName) continue;
+
+      var domainType = dom.type !== undefined && dom.type !== null ? String(dom.type) : '';
+      var dedupeKey = domainName + '\0' + domainType;
+      var item = domainMap[dedupeKey];
+      if (!item) {
+        item = {
+          'domain.name': domainName,
+          'domain.type': domainType,
+          'domain.algorithm': dom.algorithm !== undefined && dom.algorithm !== null ? dom.algorithm : '',
+          _ipSet: {}
+        };
+        domainMap[dedupeKey] = item;
+      } else if ((!item['domain.algorithm']) && dom.algorithm !== undefined && dom.algorithm !== null) {
+        item['domain.algorithm'] = dom.algorithm;
+      }
+
+      var gpRefs = Array.isArray(dom.gpool_list) ? dom.gpool_list : [];
+      for (j = 0; j < gpRefs.length; j++) {
+        var gpRef = gpRefs[j];
+        if (!gpRef || typeof gpRef !== 'object') continue;
+        var gpName = gpRef.gpool_name || '';
+        if (!gpName) continue;
+        var gpObj = gpMap[gpName];
+        if (!gpObj || typeof gpObj !== 'object' || !Array.isArray(gpObj.gmember_list)) continue;
+
+        for (k = 0; k < gpObj.gmember_list.length; k++) {
+          var gm = gpObj.gmember_list[k];
+          if (!gm || typeof gm !== 'object') continue;
+          var ip = gm.ip !== undefined && gm.ip !== null ? String(gm.ip).trim() : '';
+          if (ip) item._ipSet[ip] = true;
+        }
+      }
+    }
+
+    var keys = Object.keys(domainMap).sort(function (a, b) {
+      var ra = domainMap[a];
+      var rb = domainMap[b];
+      var na = String(ra['domain.name'] || '');
+      var nb = String(rb['domain.name'] || '');
+      var cmp = na.localeCompare(nb);
+      if (cmp !== 0) return cmp;
+      return String(ra['domain.type'] || '').localeCompare(String(rb['domain.type'] || ''));
+    });
+    for (i = 0; i < keys.length; i++) {
+      var row = domainMap[keys[i]];
+      var ips = Object.keys(row._ipSet).sort(function (a, b) {
+        return String(a).localeCompare(String(b));
+      });
+      rows.push({
+        'domain.name': row['domain.name'],
+        'domain.type': row['domain.type'],
+        'domain.algorithm': row['domain.algorithm'],
+        'member.ip': ips.join(',')
+      });
+    }
+    return rows;
+  }
+
   return {
     isScalar: isScalar,
     normalizeHmsList: normalizeHmsList,
     buildDcMemberIndex: buildDcMemberIndex,
     collectAvailableFields: collectAvailableFields,
     buildAddRows: buildAddRows,
+    buildDomainListRows: buildDomainListRows,
     buildTopology: buildTopology,
     buildCsvContent: buildCsvContent
   };
