@@ -98,9 +98,7 @@
       '<h3>' + tool.name + '</h3>' +
       '<p>' + tool.description + '</p>' +
       '<div class="tag-row">' + tagsHtml + '</div>' +
-      (tool.status === 'ready'
-        ? '<span class="btn btn-primary">打开工具 →</span>'
-        : '<span class="btn btn-outline">即将上线</span>');
+      (tool.status !== 'ready' ? '<span class="tag">即将上线</span>' : '');
 
     grid.appendChild(card);
   }
