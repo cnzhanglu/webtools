@@ -97,9 +97,15 @@ var GslbCompareProcess = (function () {
               'member.dc_name': dcName,
               'member.gmember_name': gmemberName,
               'member.ip': ip,
+              'member.port': trimString(gm.port),
               statuses: {}
             };
             rowMap[key] = row;
+          }
+          // 若同一 key 下端口存在非空值，则补齐（避免部分字段缺失导致导出为空）
+          if (!row['member.port']) {
+            var portCandidate = trimString(gm.port);
+            if (portCandidate) row['member.port'] = portCandidate;
           }
 
           var dcRef = dcIndex[dcName + '\0' + gmemberName] || {};
@@ -214,7 +220,8 @@ var GslbCompareProcess = (function () {
         'domain.type': base['domain.type'],
         'member.dc_name': base['member.dc_name'],
         'member.gmember_name': base['member.gmember_name'],
-        'member.ip': base['member.ip']
+        'member.ip': base['member.ip'],
+        'member.port': base['member.port']
       };
 
       var summary = '一致';
@@ -251,7 +258,9 @@ var GslbCompareProcess = (function () {
       if (x !== 0) return x;
       x = String(a['member.gmember_name']).localeCompare(String(b['member.gmember_name']));
       if (x !== 0) return x;
-      return String(a['member.ip']).localeCompare(String(b['member.ip']));
+      x = String(a['member.ip']).localeCompare(String(b['member.ip']));
+      if (x !== 0) return x;
+      return String(a['member.port']).localeCompare(String(b['member.port']));
     });
 
     return rows;
