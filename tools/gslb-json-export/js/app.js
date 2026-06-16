@@ -58,6 +58,7 @@ var GslbApp = (function () {
     });
     document.getElementById('btn-preview').addEventListener('click', preview);
     document.getElementById('btn-export').addEventListener('click', exportCsv);
+    document.getElementById('btn-export-domain-list').addEventListener('click', exportDomainListCsv);
     document.getElementById('btn-help').addEventListener('click', showHelp);
     document.getElementById('btn-reset').addEventListener('click', resetAllGroups);
     document.getElementById('btn-close-help').addEventListener('click', hideHelp);
@@ -508,6 +509,24 @@ var GslbApp = (function () {
     alert('已导出 CSV：' + filename);
   }
 
+  function exportDomainListCsv() {
+    if (!jsonData) {
+      alert('请先导入 JSON。');
+      return;
+    }
+
+    var columns = ['domain.name', 'domain.type', 'domain.algorithm', 'member.ip'];
+    var rows = GslbProcess.buildDomainListRows(jsonData);
+    if (!rows.length) {
+      alert('未找到可导出的域名列表数据。');
+      return;
+    }
+    var csvContent = GslbProcess.buildCsvContent(columns, rows);
+    var filename = 'gslb_domain_list_' + new Date().toISOString().slice(0, 10) + '.csv';
+    BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
+    alert('已导出域名列表 CSV：' + filename);
+  }
+
   function showHelp() {
     document.getElementById('help-overlay').classList.add('visible');
   }
@@ -553,6 +572,7 @@ var GslbApp = (function () {
   return {
     init: init,
     preview: preview,
-    exportCsv: exportCsv
+    exportCsv: exportCsv,
+    exportDomainListCsv: exportDomainListCsv
   };
 })();
