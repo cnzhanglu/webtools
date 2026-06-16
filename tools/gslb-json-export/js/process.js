@@ -454,12 +454,75 @@ var GslbProcess = (function () {
     return lines.join('\r\n');
   }
 
+  function buildDomainListRows(jsonData) {
+    var rows = [];
+    if (!jsonData || typeof jsonData !== 'object') return rows;
+
+    var addList = getAddList(jsonData);
+    var gpMap = buildGpoolMap(jsonData);
+    var domainMap = {};
+    var i, j, k;
+
+    for (i = 0; i < addList.length; i++) {
+      var dom = addList[i];
+      if (!dom || typeof dom !== 'object') continue;
+      var domainName = dom.name || '';
+      if (!domainName) continue;
+
+      var item = domainMap[domainName];
+      if (!item) {
+        item = {
+          'domain.name': domainName,
+          'domain.type': dom.type !== undefined && dom.type !== null ? dom.type : '',
+          'domain.algorithm': dom.algorithm !== undefined && dom.algorithm !== null ? dom.algorithm : '',
+          _ipSet: {}
+        };
+        domainMap[domainName] = item;
+      }
+
+      var gpRefs = Array.isArray(dom.gpool_list) ? dom.gpool_list : [];
+      for (j = 0; j < gpRefs.length; j++) {
+        var gpRef = gpRefs[j];
+        if (!gpRef || typeof gpRef !== 'object') continue;
+        var gpName = gpRef.gpool_name || '';
+        if (!gpName) continue;
+        var gpObj = gpMap[gpName];
+        if (!gpObj || typeof gpObj !== 'object' || !Array.isArray(gpObj.gmember_list)) continue;
+
+        for (k = 0; k < gpObj.gmember_list.length; k++) {
+          var gm = gpObj.gmember_list[k];
+          if (!gm || typeof gm !== 'object') continue;
+          var ip = gm.ip !== undefined && gm.ip !== null ? String(gm.ip).trim() : '';
+          if (ip) item._ipSet[ip] = true;
+        }
+      }
+    }
+
+    var names = Object.keys(domainMap).sort(function (a, b) {
+      return String(a).localeCompare(String(b));
+    });
+    for (i = 0; i < names.length; i++) {
+      var row = domainMap[names[i]];
+      var ips = Object.keys(row._ipSet).sort(function (a, b) {
+        return String(a).localeCompare(String(b));
+      });
+      rows.push({
+        'domain.name': row['domain.name'],
+        'domain.type': row['domain.type'],
+        'domain.algorithm': row['domain.algorithm'],
+        'member.ip': ips.join(',')
+      });
+    }
+    return rows;
+  }
+
   return {
     isScalar: isScalar,
     normalizeHmsList: normalizeHmsList,
     buildDcMemberIndex: buildDcMemberIndex,
     collectAvailableFields: collectAvailableFields,
     buildAddRows: buildAddRows,
+    buildDomainListRows: buildDomainListRows,
     buildTopology: buildTopology,
     buildCsvContent: buildCsvContent
   };
