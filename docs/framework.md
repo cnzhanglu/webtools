@@ -36,7 +36,7 @@
 - `BocUtils` — 工具函数（复制、下载、HTML 转义）
 - `BocXlsx` — xlsx 导出
 - `BocIpCidr` — IPv4/IPv6 地址、CIDR、范围解析与网段合并算法
-- `BocToolRegistry` — 工具列表数组
+- `BocToolRegistry` — 工具分组注册表（publicTools / specialTools）
 
 ## Git 分支与工作流
 
