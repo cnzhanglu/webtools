@@ -23,9 +23,46 @@ var Excel2JsonValidate = (function () {
     return parts.every(validOctet);
   }
 
+  /**
+   * RFC 4291 IPv6 地址校验（支持 :: 缩写，不支持 zone ID）
+   */
   function isIPv6(s) {
-    /* 简单判断：含冒号即视为 IPv6 */
-    return s.indexOf(':') !== -1;
+    if (s.indexOf(':') === -1) return false;
+    /* 最多一个 :: */
+    if ((s.match(/::/g) || []).length > 1) return false;
+
+    var halves = s.split('::');
+    if (halves.length > 2) return false;
+
+    function validGroups(part) {
+      if (!part) return [];
+      return part.split(':');
+    }
+
+    var left  = validGroups(halves[0]);
+    var right = halves.length === 2 ? validGroups(halves[1]) : [];
+
+    /* 右半段最后一组可能是 IPv4 映射（如 ::ffff:192.168.1.1） */
+    var ipv4Tail = false;
+    if (right.length && isIPv4(right[right.length - 1])) {
+      right = right.slice(0, -1).concat(['0', '0']); /* IPv4 占 2 个 16-bit 组 */
+      ipv4Tail = true;
+    }
+
+    var groups = left.concat(right);
+    var totalGroups = groups.length;
+
+    if (halves.length === 1) {
+      /* 无 :: 必须恰好 8 组 */
+      if (totalGroups !== 8) return false;
+    } else {
+      /* 有 :: 两侧加起来不超过 8 组 */
+      if (totalGroups > 8) return false;  /* :: 至少代表 1 组 */
+    }
+
+    /* 每组 1-4 位十六进制 */
+    var HEX = /^[0-9a-fA-F]{1,4}$/;
+    return groups.every(function (g) { return HEX.test(g); });
   }
 
   /**
@@ -54,10 +91,7 @@ var Excel2JsonValidate = (function () {
     for (var i = 0; i < lines.length; i++) {
       var ip = lines[i].trim();
       if (!ip) continue;
-      if (isIPv6(ip)) {
-        return { ips: [], error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] 不支持 IPv6 地址：' + ip };
-      }
-      if (!isIPv4(ip)) {
+      if (!isIPv4(ip) && !isIPv6(ip)) {
         return { ips: [], error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] IP 地址格式非法：' + ip };
       }
       ips.push(ip);
@@ -77,10 +111,7 @@ var Excel2JsonValidate = (function () {
       return { ip: '', error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] 静态类型 IP 字段含换行符，应为单个 IP' };
     }
     var ip = raw.trim();
-    if (isIPv6(ip)) {
-      return { ip: '', error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] 不支持 IPv6 地址：' + ip };
-    }
-    if (!isIPv4(ip)) {
+    if (!isIPv4(ip) && !isIPv6(ip)) {
       return { ip: '', error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] IP 地址格式非法：' + ip };
     }
     return { ip: ip, error: null };
