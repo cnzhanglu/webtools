@@ -469,15 +469,19 @@ var GslbProcess = (function () {
       var domainName = dom.name || '';
       if (!domainName) continue;
 
-      var item = domainMap[domainName];
+      var domainType = dom.type !== undefined && dom.type !== null ? String(dom.type) : '';
+      var dedupeKey = domainName + '\0' + domainType;
+      var item = domainMap[dedupeKey];
       if (!item) {
         item = {
           'domain.name': domainName,
-          'domain.type': dom.type !== undefined && dom.type !== null ? dom.type : '',
+          'domain.type': domainType,
           'domain.algorithm': dom.algorithm !== undefined && dom.algorithm !== null ? dom.algorithm : '',
           _ipSet: {}
         };
-        domainMap[domainName] = item;
+        domainMap[dedupeKey] = item;
+      } else if ((!item['domain.algorithm']) && dom.algorithm !== undefined && dom.algorithm !== null) {
+        item['domain.algorithm'] = dom.algorithm;
       }
 
       var gpRefs = Array.isArray(dom.gpool_list) ? dom.gpool_list : [];
@@ -498,11 +502,17 @@ var GslbProcess = (function () {
       }
     }
 
-    var names = Object.keys(domainMap).sort(function (a, b) {
-      return String(a).localeCompare(String(b));
+    var keys = Object.keys(domainMap).sort(function (a, b) {
+      var ra = domainMap[a];
+      var rb = domainMap[b];
+      var na = String(ra['domain.name'] || '');
+      var nb = String(rb['domain.name'] || '');
+      var cmp = na.localeCompare(nb);
+      if (cmp !== 0) return cmp;
+      return String(ra['domain.type'] || '').localeCompare(String(rb['domain.type'] || ''));
     });
-    for (i = 0; i < names.length; i++) {
-      var row = domainMap[names[i]];
+    for (i = 0; i < keys.length; i++) {
+      var row = domainMap[keys[i]];
       var ips = Object.keys(row._ipSet).sort(function (a, b) {
         return String(a).localeCompare(String(b));
       });
