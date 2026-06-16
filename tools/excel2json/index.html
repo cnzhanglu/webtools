@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel 切换 JSON 工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>Excel 切换 JSON 工具</h1>
+    <p>上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用生成切换与回切 JSON，本地浏览器完成</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main excel2json-main">
+
+  <!-- 操作栏 -->
+  <div class="op-bar panel">
+    <div class="panel-body op-body">
+      <input type="file" id="file-input" accept=".xlsx" hidden>
+      <button class="btn btn-primary" id="btn-load" type="button">📂 上传 Excel (.xlsx)</button>
+      <button class="btn btn-success" id="btn-download-all" type="button" disabled>⬇ 全部下载</button>
+      <button class="btn btn-outline" id="btn-help-toggle" type="button"
+              onclick="document.getElementById('help-panel').classList.toggle('hidden')">📘 格式说明</button>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div class="status-bar" id="status-text">状态：请上传 .xlsx 文件</div>
+
+  <!-- 错误面板 -->
+  <div class="error-box" id="error-box" style="display:none"></div>
+
+  <!-- 帮助面板 -->
+  <div class="panel hidden" id="help-panel">
+    <div class="panel-header"><h2>Excel 格式说明</h2></div>
+    <div class="panel-body help-body">
+      <p>第 1 行为标题行，数据从第 <strong>2 行</strong>起。</p>
+      <table class="help-table">
+        <thead><tr><th>列</th><th>含义</th><th>规则</th></tr></thead>
+        <tbody>
+          <tr><td>A</td><td>应用名称</td><td>分组键；空值行整行跳过；支持合并单元格</td></tr>
+          <tr><td>D</td><td>域名 FQDN</td><td>每行一个；符合 DNS 规范</td></tr>
+          <tr><td>E</td><td>原始 IP</td><td>动态：换行分隔多个；静态：单个 IPv4</td></tr>
+          <tr><td>F</td><td>目标 IP</td><td>同 E 列规则</td></tr>
+          <tr><td>G</td><td>类型</td><td><code>动态</code> 或 <code>静态</code>，其他值跳过</td></tr>
+        </tbody>
+      </table>
+      <p><strong>动态</strong>：集合差分。address = E 有 F 无；new_address = F 有 E 无；交集 IP 两边均不写入。</p>
+      <p><strong>静态</strong>：address = [E IP]，new_address = [F IP]（允许一侧为空）；回切互换两列。</p>
+      <p><strong>输出文件命名</strong>：<code>{应用名}_动态_切换.json</code>、<code>{应用名}_动态_回切.json</code>、<code>{应用名}_静态_切换.json</code>、<code>{应用名}_静态_回切.json</code></p>
+      <p><strong>JSON 结构</strong>：<code>[{ "fqdn": "...", "address": [...], "new_address": [...] }]</code></p>
+    </div>
+  </div>
+
+  <!-- 主内容区：文件列表 + JSON 预览 -->
+  <div class="content-row">
+    <!-- 左侧：文件列表 -->
+    <div class="panel file-panel">
+      <div class="panel-header"><h2>产出文件</h2></div>
+      <div class="panel-body" id="file-list">
+        <div class="empty-hint">上传文件后显示</div>
+      </div>
+    </div>
+
+    <!-- 右侧：JSON 预览 -->
+    <div class="panel preview-panel">
+      <div class="panel-header">
+        <h2>JSON 预览：<span id="preview-filename" style="font-weight:400;font-size:.9rem">—</span></h2>
+        <div class="btn-row">
+          <button class="btn btn-outline btn-sm" id="btn-copy" type="button">复制</button>
+          <button class="btn btn-success btn-sm" id="btn-download" type="button">下载</button>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:0">
+        <div class="json-scroll">
+          <pre id="preview-json">（请从左侧选择文件查看）</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  工具箱 · 纯静态前端 · 数据不出浏览器<br>
+  <a href="https://github.com/cnzhanglu/webtools" target="_blank" rel="noopener noreferrer">离线文件下载 GitHub</a>
+</footer>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/xlsx-read.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/process.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>
