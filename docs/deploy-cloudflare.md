@@ -47,6 +47,16 @@ git push -u origin main
 
 之后每次 `git push` 自动触发新版本部署。
 
+## 文档与规则一致性维护
+
+- 工具新增/调整后，同步更新以下文档，确保资料对齐：
+  - 根目录 `README.md`（总览、工具清单、公共模块）
+  - 各工具目录 `tools/<id>/README.md`（功能与模块逻辑）
+  - `docs/framework.md` 与 `.cursor/rules/webtools-framework.mdc`
+- 首页工具由 `shared/js/tools-registry.js` 驱动，使用分组结构：
+  - `publicTools`（公共工具）
+  - `specialTools`（定制工具）
+
 ### 3. 绑定自定义域名（可选）
 
 1. 进入 Pages 项目 → **Custom domains** → **Set up a custom domain**
