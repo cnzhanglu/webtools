@@ -24,8 +24,8 @@
 ## 新增工具
 
 1. 创建 `tools/<tool-id>/index.html` 及 JS/CSS
-2. 在 `shared/js/tools-registry.js` 注册
-3. 首页自动展示
+2. 在 `shared/js/tools-registry.js` 的 `publicTools` 或 `specialTools` 注册
+3. 首页按“公共工具 / 定制工具”自动分区展示
 
 ## 脚本加载
 
@@ -36,7 +36,7 @@
 - `BocUtils` — 工具函数（复制、下载、HTML 转义）
 - `BocXlsx` — xlsx 导出
 - `BocIpCidr` — IPv4/IPv6 地址、CIDR、范围解析与网段合并算法
-- `BocToolRegistry` — 工具分组注册表（publicTools / specialTools）
+- `BocToolRegistry` — 工具分组注册表（`publicTools` / `specialTools`）
 
 ## 代码注释规范
 

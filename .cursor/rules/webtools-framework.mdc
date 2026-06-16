@@ -45,7 +45,7 @@ alwaysApply: true
 │   └── js/
 │       ├── utils.js            # 复制、下载、escHtml 等
 │       ├── xlsx.js             # xlsx 生成
-│       ├── tools-registry.js   # 首页工具列表注册表
+│       ├── tools-registry.js   # 首页工具分组注册表（publicTools/specialTools）
 │       └── pwa.js              # SW 注册（file:// 自动跳过）
 └── tools/<tool-id>/            # 各独立工具
     ├── index.html
@@ -58,8 +58,8 @@ alwaysApply: true
 1. 在 `tools/<tool-id>/` 创建目录与 `index.html`
 2. 引用 `../../shared/css/common.css`，按需引用 shared JS
 3. 页头加「← 返回工具箱」链接：`href="../../index.html"`
-4. 在 `shared/js/tools-registry.js` 追加注册条目（`id`、`name`、`description`、`tags`、`path`、`status`）
-5. 首页 `index.html` 自动从注册表渲染，无需改首页逻辑
+4. 在 `shared/js/tools-registry.js` 的 `publicTools` 或 `specialTools` 中追加注册条目（`id`、`name`、`description`、`tags`、`path`、`status`）
+5. 首页 `index.html` 按“公共工具 / 定制工具”分区从注册表自动渲染，无需改首页逻辑
 6. **PWA**：按下方「PWA 约定」在工具页加入 manifest / 图标 / `pwa.js`，并更新 `sw.js` 预缓存列表
 
 ## PWA 约定
