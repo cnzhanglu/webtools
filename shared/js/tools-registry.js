@@ -27,6 +27,14 @@ var BocToolRegistry = [
     status: 'ready',
   },
   {
+    id: 'excel2json',
+    name: 'Excel 切换 JSON',
+    description: '上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用名生成切换与回切 JSON，支持动态/静态两种类型，全部在本地浏览器完成。',
+    tags: ['GSLB', 'Excel', 'JSON', '切换'],
+    path: 'tools/excel2json/index.html',
+    status: 'ready',
+  },
+  {
     id: 'gslb-json-compare',
     name: 'GSLB 多文件对比',
     description: '上传多个 GSLB JSON，按“域名名称+域名类型+所属数据中心+成员名称+成员IP”横向对比状态，支持可选对比列、过滤预览与 Excel 导出。',

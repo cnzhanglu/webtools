@@ -5,7 +5,7 @@
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  */
-var CACHE_VERSION = 'webtools-v15';
+var CACHE_VERSION = 'webtools-v16';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -36,6 +36,12 @@ var PRECACHE_URLS = [
   './tools/gslb-json-export/js/graph.js',
   './tools/gslb-json-export/js/transfer.js',
   './tools/gslb-json-export/js/app.js',
+  './tools/excel2json/',
+  './tools/excel2json/css/tool.css',
+  './tools/excel2json/js/validate.js',
+  './tools/excel2json/js/process.js',
+  './tools/excel2json/js/app.js',
+  './shared/js/xlsx-read.js',
   './tools/gslb-json-compare/',
   './tools/gslb-json-compare/css/tool.css',
   './tools/gslb-json-compare/js/fields.js',
