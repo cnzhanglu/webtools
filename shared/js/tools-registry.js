@@ -36,8 +36,8 @@ var BocToolRegistry = [
   },
   {
     id: 'excel2json',
-    name: 'Excel 切换 JSON',
-    description: '上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用名生成切换与回切 JSON，支持动态/静态两种类型，全部在本地浏览器完成。',
+    name: '专用工具：Excel 切换 JSON',
+    description: '专用工具：上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用名生成切换与回切 JSON，支持动态/静态两种类型，全部在本地浏览器完成。',
     tags: ['GSLB', 'Excel', 'JSON', '切换'],
     path: 'tools/excel2json/index.html',
     status: 'ready',
