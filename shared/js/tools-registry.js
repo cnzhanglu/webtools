@@ -68,23 +68,13 @@ var BocToolRegistry = {
       tags: ['编解码', 'URL'],
       path: 'tools/url-codec/index.html',
       status: 'ready',
-    }
-  ],
-  specialTools: [
+    },
     {
       id: 'gslb-json-export',
       name: 'GSLB JSON 导出',
       description: '解析 GSLB 配置 JSON（域名、地址池、成员），按方案选择字段并排序，全量预览与过滤，点击域名查看引用关系图，导出带中文表头的 CSV（UTF-8 BOM）。',
       tags: ['GSLB', 'JSON', 'CSV', '关系图'],
       path: 'tools/gslb-json-export/index.html',
-      status: 'ready',
-    },
-    {
-      id: 'excel2json',
-      name: 'Excel 切换 JSON',
-      description: '上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用名生成切换与回切 JSON，支持动态/静态两种类型，全部在本地浏览器完成。',
-      tags: ['GSLB', 'Excel', 'JSON', '切换'],
-      path: 'tools/excel2json/index.html',
       status: 'ready',
     },
     {
@@ -101,6 +91,16 @@ var BocToolRegistry = {
       description: '固定前缀策略 + 白名单（DNS/集群内部/SNMP/mgmt）+ 结尾拒绝，三段式生成 iptables/ip6tables 规则字符串；IPv4/IPv6 分离，支持合法性校验、现有规则导入识别、可编辑模板与单文件多设备本地存储。',
       tags: ['安全', 'iptables', '防火墙'],
       path: 'tools/iptables-gen/index.html',
+      status: 'ready',
+    }
+  ],
+  specialTools: [
+    {
+      id: 'excel2json',
+      name: 'Excel 切换 JSON',
+      description: '上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用名生成切换与回切 JSON，支持动态/静态两种类型，全部在本地浏览器完成。',
+      tags: ['GSLB', 'Excel', 'JSON', '切换'],
+      path: 'tools/excel2json/index.html',
       status: 'ready',
     }
   ]
