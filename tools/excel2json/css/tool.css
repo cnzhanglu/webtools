@@ -1,0 +1,147 @@
+/* Excel 切换 JSON — 页面专属样式 */
+
+.excel2json-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.op-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.status-bar {
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: .88rem;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+
+.status-bar.status-error {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.error-box {
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: .85rem;
+  color: #b91c1c;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 帮助面板 */
+.help-body {
+  font-size: .88rem;
+  line-height: 1.7;
+}
+.help-body p { margin: 6px 0; }
+.help-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  font-size: .84rem;
+}
+.help-table th {
+  background: #5B9BD5;
+  color: #fff;
+  padding: 7px 12px;
+  text-align: left;
+}
+.help-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e9edf5;
+}
+.help-table code {
+  background: #eef2fb;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: .82rem;
+}
+
+/* 内容行：文件列表 + JSON 预览 */
+.content-row {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  min-height: 480px;
+}
+
+/* 左侧文件列表 */
+.file-panel .panel-body {
+  padding: 8px 4px;
+  overflow-y: auto;
+  max-height: 520px;
+}
+
+.file-group {
+  margin-bottom: 14px;
+}
+
+.file-group-title {
+  font-size: .8rem;
+  font-weight: 600;
+  color: #3b5998;
+  padding: 4px 10px;
+  background: #eef3fb;
+  border-radius: 5px;
+  margin-bottom: 4px;
+}
+
+.file-item-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 12px;
+  font-size: .82rem;
+  color: #334155;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background .1s;
+}
+.file-item-btn:hover { background: #f0f5ff; }
+.file-item-btn.active {
+  background: #2563a8;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* JSON 预览 */
+.json-scroll {
+  overflow: auto;
+  max-height: 520px;
+  border-top: 1px solid #eaecf0;
+}
+
+#preview-json {
+  margin: 0;
+  padding: 14px 16px;
+  font-family: "Menlo", "Consolas", "Monaco", monospace;
+  font-size: .83rem;
+  line-height: 1.6;
+  color: #1a1a2e;
+  white-space: pre;
+  background: #fafbff;
+  min-height: 200px;
+}
+
+@media (max-width: 900px) {
+  .content-row {
+    grid-template-columns: 1fr;
+  }
+}

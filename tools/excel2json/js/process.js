@@ -1,0 +1,182 @@
+/**
+ * Excel 切换 JSON — 分组、动态/静态转换、切换/回切生成
+ * 移植自 Python converters/data_converter.py + main._export_results
+ *
+ * API：Excel2JsonProcess.run(rows) → { ok, outputs, stats } | { ok:false, error }
+ * rows：BocXlsxRead.parse 的 rows 数组（rowIndex, A-H 字段）
+ */
+var Excel2JsonProcess = (function () {
+  'use strict';
+
+  /**
+   * 集合差分：A 中有 B 中无
+   */
+  function setDiff(a, b) {
+    var bSet = {};
+    b.forEach(function (v) { bSet[v] = true; });
+    return a.filter(function (v) { return !bSet[v]; });
+  }
+
+  function sortedUniq(arr) {
+    var seen = {};
+    return arr.filter(function (v) { if (seen[v]) return false; seen[v] = true; return true; }).sort();
+  }
+
+  /**
+   * 主入口
+   */
+  function run(rows) {
+    if (!rows || !rows.length) {
+      return { ok: true, outputs: [], stats: { appCount: 0, fileCount: 0, rowCount: 0 } };
+    }
+
+    /* 1. 跳过第 1 行（标题行） */
+    var dataRows = rows.filter(function (r) { return r.rowIndex > 1; });
+
+    /* 2. 按 A 列分组；A 列空值行跳过 */
+    var groups   = {};  /* appName → { dynamic: [], static: [] } */
+    var appOrder = [];
+
+    dataRows.forEach(function (row) {
+      var app  = (row.A || '').trim();
+      if (!app) return;
+
+      var fqdn = (row.D || '').trim();
+      var rawE = row.E || '';
+      var rawF = row.F || '';
+      var type = (row.G || '').trim();
+
+      /* G 非 动态/静态 → 跳过，不报错 */
+      if (type !== '动态' && type !== '静态') return;
+
+      /* 域名校验 */
+      var domErr = Excel2JsonValidate.checkDomain(fqdn, row.rowIndex);
+      if (domErr) {
+        return { error: '[行 ' + row.rowIndex + ' 列 D] ' + domErr };
+      }
+
+      if (!groups[app]) {
+        groups[app] = { dynamic: [], static: [] };
+        appOrder.push(app);
+      }
+
+      if (type === '动态') {
+        var eRes = Excel2JsonValidate.validateMultipleIPs(rawE, row.rowIndex, 'E');
+        if (eRes.error) return throwErr(eRes.error);
+        var fRes = Excel2JsonValidate.validateMultipleIPs(rawF, row.rowIndex, 'F');
+        if (fRes.error) return throwErr(fRes.error);
+        groups[app].dynamic.push({ fqdn: fqdn, eIps: eRes.ips, fIps: fRes.ips, rowIndex: row.rowIndex });
+      } else {
+        var eRes2 = Excel2JsonValidate.validateSingleIP(rawE, row.rowIndex, 'E');
+        if (eRes2.error) return throwErr(eRes2.error);
+        var fRes2 = Excel2JsonValidate.validateSingleIP(rawF, row.rowIndex, 'F');
+        if (fRes2.error) return throwErr(fRes2.error);
+        groups[app].static.push({ fqdn: fqdn, eIp: eRes2.ip, fIp: fRes2.ip, rowIndex: row.rowIndex });
+      }
+    });
+
+    /* helper — 校验失败时抛出（用 try/catch 捕获） */
+    var _pendingError = null;
+    function throwErr(msg) { _pendingError = msg; }
+
+    /* 重跑一遍，这次真正校验并收集错误（前面 forEach 里 return 的是局部 return，不影响外层） */
+    _pendingError = null;
+    groups    = {};
+    appOrder  = [];
+
+    for (var ri = 0; ri < dataRows.length; ri++) {
+      var row  = dataRows[ri];
+      var app  = (row.A || '').trim();
+      if (!app) continue;
+
+      var fqdn = (row.D || '').trim();
+      var rawE = row.E || '';
+      var rawF = row.F || '';
+      var type = (row.G || '').trim();
+
+      if (type !== '动态' && type !== '静态') continue;
+
+      /* 域名校验 */
+      var domErr = Excel2JsonValidate.checkDomain(fqdn, row.rowIndex);
+      if (domErr) return { ok: false, error: '[行 ' + row.rowIndex + ' 列 D] ' + domErr };
+
+      if (!groups[app]) { groups[app] = { dynamic: [], static: [] }; appOrder.push(app); }
+
+      if (type === '动态') {
+        var eRes = Excel2JsonValidate.validateMultipleIPs(rawE, row.rowIndex, 'E');
+        if (eRes.error) return { ok: false, error: eRes.error };
+        var fRes = Excel2JsonValidate.validateMultipleIPs(rawF, row.rowIndex, 'F');
+        if (fRes.error) return { ok: false, error: fRes.error };
+        groups[app].dynamic.push({ fqdn: fqdn, eIps: eRes.ips, fIps: fRes.ips });
+      } else {
+        var eRes2 = Excel2JsonValidate.validateSingleIP(rawE, row.rowIndex, 'E');
+        if (eRes2.error) return { ok: false, error: eRes2.error };
+        var fRes2 = Excel2JsonValidate.validateSingleIP(rawF, row.rowIndex, 'F');
+        if (fRes2.error) return { ok: false, error: fRes2.error };
+        groups[app].static.push({ fqdn: fqdn, eIp: eRes2.ip, fIp: fRes2.ip });
+      }
+    }
+
+    /* 3. 生成输出 */
+    var outputs   = [];
+    var fileCount = 0;
+
+    appOrder.forEach(function (appName) {
+      var g = groups[appName];
+
+      /* 动态 */
+      if (g.dynamic.length) {
+        var dynSwitch = [], dynRevert = [];
+        g.dynamic.forEach(function (item) {
+          var address    = sortedUniq(setDiff(item.eIps, item.fIps));
+          var newAddress = sortedUniq(setDiff(item.fIps, item.eIps));
+          dynSwitch.push({ fqdn: item.fqdn, address: address, new_address: newAddress });
+          dynRevert.push({ fqdn: item.fqdn, address: newAddress, new_address: address });
+        });
+        outputs.push({
+          key: appName + '_动态',
+          appName: appName,
+          typeName: '动态',
+          switchData: dynSwitch,
+          revertData: dynRevert,
+          switchFilename: appName + '_动态_切换.json',
+          revertFilename: appName + '_动态_回切.json'
+        });
+        fileCount += 2;
+      }
+
+      /* 静态 */
+      if (g.static.length) {
+        var stSwitch = [], stRevert = [];
+        g.static.forEach(function (item) {
+          var addrList    = item.eIp ? [item.eIp] : [];
+          var newAddrList = item.fIp ? [item.fIp] : [];
+          stSwitch.push({ fqdn: item.fqdn, address: addrList, new_address: newAddrList });
+          stRevert.push({ fqdn: item.fqdn, address: newAddrList, new_address: addrList });
+        });
+        outputs.push({
+          key: appName + '_静态',
+          appName: appName,
+          typeName: '静态',
+          switchData: stSwitch,
+          revertData: stRevert,
+          switchFilename: appName + '_静态_切换.json',
+          revertFilename: appName + '_静态_回切.json'
+        });
+        fileCount += 2;
+      }
+    });
+
+    return {
+      ok: true,
+      outputs: outputs,
+      stats: {
+        appCount: appOrder.length,
+        fileCount: fileCount,
+        rowCount: dataRows.length
+      }
+    };
+  }
+
+  return { run: run };
+}());
