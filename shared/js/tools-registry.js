@@ -27,6 +27,14 @@ var BocToolRegistry = [
     status: 'ready',
   },
   {
+    id: 'gslb-json-compare',
+    name: 'GSLB 多文件对比',
+    description: '上传多个 GSLB JSON，按“域名名称+域名类型+所属数据中心+成员名称+成员IP”横向对比状态，支持可选对比列、过滤预览与 Excel 导出。',
+    tags: ['GSLB', 'JSON', '对比', 'Excel'],
+    path: 'tools/gslb-json-compare/index.html',
+    status: 'ready',
+  },
+  {
     id: 'cidr-vs',
     name: 'CIDR 网段对比',
     description: '对比两份 IP/CIDR 清单（IPv4/IPv6），判断 B 清单网段是否被 A 清单覆盖，支持粘贴或文件加载、可视化结果与 xlsx 导出。',

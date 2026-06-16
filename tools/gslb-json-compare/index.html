@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GSLB 多文件对比工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>GSLB 多文件对比工具</h1>
+    <p>上传多个 GSLB JSON，按唯一键横向对比状态字段，支持过滤预览与 Excel 导出</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main compare-main">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>文件与对比配置</h2>
+      <div class="btn-row">
+        <input type="file" id="file-input" accept=".json,application/json" multiple hidden>
+        <button class="btn btn-primary" id="btn-load" type="button">📂 导入多个 JSON</button>
+        <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览对比</button>
+        <button class="btn btn-success" id="btn-export" type="button">📊 导出 Excel</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="status-bar" id="status-text">状态：请先导入至少 2 个 JSON 文件</div>
+      <div class="section-title">已加载文件（支持重命名）</div>
+      <div id="file-list" class="file-list">
+        <div class="empty-hint">暂无文件</div>
+      </div>
+
+      <div class="section-title">对比列（默认仅“成员最终健康检测状态”）</div>
+      <div id="field-options" class="field-options"></div>
+    </div>
+  </div>
+
+  <div class="panel preview-panel">
+    <div class="panel-header">
+      <h2>对比结果预览</h2>
+      <span class="stat-badge" id="preview-badge">—</span>
+    </div>
+    <div class="preview-toolbar">
+      <input type="search" id="filter-query" class="filter-input" placeholder="输入关键字过滤（域名、成员、状态等）">
+      <select id="filter-result" class="filter-select">
+        <option value="all">全部结果</option>
+        <option value="inconsistent">仅不一致</option>
+        <option value="missing">仅缺失</option>
+        <option value="consistent">仅一致</option>
+      </select>
+      <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="preview-scroll">
+        <table id="preview-table">
+          <thead id="preview-head"></thead>
+          <tbody id="preview-body">
+            <tr><td><span class="empty-hint">导入文件并点击“预览对比”查看结果</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  工具箱 · 纯静态前端 · 数据不出浏览器<br>
+  <a href="https://github.com/cnzhanglu/webtools" target="_blank" rel="noopener noreferrer">离线文件下载 GitHub</a>
+</footer>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/xlsx.js"></script>
+<script src="js/fields.js"></script>
+<script src="js/process.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>
