@@ -31,6 +31,12 @@
     pointer-events: none;
   }
   .tool-card .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tool-section { margin-bottom: 26px; }
+  .tool-section h3 {
+    margin: 0 0 12px;
+    color: #1f3f63;
+    font-size: 1.05rem;
+  }
 </style>
 </head>
 <body>
@@ -52,7 +58,15 @@
     </p>
   </div>
 
-  <div class="tool-grid" id="tool-grid"></div>
+  <section class="tool-section">
+    <h3>公共工具</h3>
+    <div class="tool-grid" id="tool-grid-public"></div>
+  </section>
+
+  <section class="tool-section">
+    <h3>专用工具</h3>
+    <div class="tool-grid" id="tool-grid-special"></div>
+  </section>
 
 </main>
 
@@ -64,9 +78,10 @@
 <script src="shared/js/tools-registry.js"></script>
 <script>
 (function () {
-  var grid = document.getElementById('tool-grid');
+  var gridPublic = document.getElementById('tool-grid-public');
+  var gridSpecial = document.getElementById('tool-grid-special');
 
-  BocToolRegistry.forEach(function (tool) {
+  function renderToolCard(grid, tool) {
     var card = document.createElement('a');
     card.className = 'tool-card' + (tool.status !== 'ready' ? ' disabled' : '');
     card.href = tool.status === 'ready' ? tool.path : '#';
@@ -84,6 +99,14 @@
         : '<span class="btn btn-outline">即将上线</span>');
 
     grid.appendChild(card);
+  }
+
+  (BocToolRegistry.publicTools || []).forEach(function (tool) {
+    renderToolCard(gridPublic, tool);
+  });
+
+  (BocToolRegistry.specialTools || []).forEach(function (tool) {
+    renderToolCard(gridSpecial, tool);
   });
 })();
 </script>
