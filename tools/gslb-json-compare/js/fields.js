@@ -9,7 +9,8 @@ var GslbCompareFields = (function () {
     { key: 'domain.type', title: '域名类型' },
     { key: 'member.dc_name', title: '所属数据中心' },
     { key: 'member.gmember_name', title: '成员名称' },
-    { key: 'member.ip', title: '成员IP' }
+    { key: 'member.ip', title: '成员IP' },
+    { key: 'member.port', title: '成员端口' }
   ];
 
   var STATUS_COLUMNS = [
