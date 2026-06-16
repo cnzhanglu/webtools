@@ -107,12 +107,22 @@ var Excel2JsonProcess = (function () {
         if (eRes.error) return { ok: false, error: eRes.error };
         var fRes = Excel2JsonValidate.validateMultipleIPs(rawF, row.rowIndex, 'F');
         if (fRes.error) return { ok: false, error: fRes.error };
+        /* 差分后不能全为空（E/F 完全相同，切换无意义） */
+        var diffAddr    = sortedUniq(setDiff(eRes.ips, fRes.ips));
+        var diffNewAddr = sortedUniq(setDiff(fRes.ips, eRes.ips));
+        if (!diffAddr.length && !diffNewAddr.length) {
+          return { ok: false, error: '[行 ' + row.rowIndex + '] 动态类型 E/F 列 IP 完全相同，差分后 address 与 new_address 均为空，请检查数据' };
+        }
         groups[app].dynamic.push({ fqdn: fqdn, eIps: eRes.ips, fIps: fRes.ips });
       } else {
         var eRes2 = Excel2JsonValidate.validateSingleIP(rawE, row.rowIndex, 'E');
         if (eRes2.error) return { ok: false, error: eRes2.error };
         var fRes2 = Excel2JsonValidate.validateSingleIP(rawF, row.rowIndex, 'F');
         if (fRes2.error) return { ok: false, error: fRes2.error };
+        /* 静态类型 E/F 不能同时为空 */
+        if (!eRes2.ip && !fRes2.ip) {
+          return { ok: false, error: '[行 ' + row.rowIndex + '] 静态类型 E/F 列均为空，切换前后地址不能同时缺失' };
+        }
         groups[app].static.push({ fqdn: fqdn, eIp: eRes2.ip, fIp: fRes2.ip });
       }
     }
