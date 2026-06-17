@@ -232,6 +232,14 @@
   background: #dbeafe;
 }
 
+#preview-table tr.virtual-spacer td {
+  padding: 0;
+  border: none;
+  line-height: 0;
+  font-size: 0;
+  background: transparent;
+}
+
 #btn-view-graph:disabled {
   opacity: 0.5;
   cursor: not-allowed;

@@ -67,6 +67,7 @@
         <option value="pool">仅地址池</option>
         <option value="member">仅成员</option>
       </select>
+      <button class="btn btn-primary btn-sm" id="btn-filter-query" type="button">查询</button>
       <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
       <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
       <div class="view-tabs">
@@ -75,7 +76,7 @@
       </div>
     </div>
     <div class="panel-body" id="view-table">
-      <div class="preview-scroll">
+      <div class="preview-scroll" id="preview-scroll">
         <table id="preview-table">
           <thead id="preview-head"></thead>
           <tbody id="preview-body">
@@ -116,7 +117,7 @@
 1 支持域名、地址池、成员字段自由选择与排序
 2 支持字段方案记忆（自动记忆最近配置，保存在浏览器本地）
 3 支持高级字段：HMS、Pass、池启用、DC启用等
-4 支持全量预览与实时过滤，支持 Ctrl+C 复制选中行
+4 支持虚拟滚动预览大量数据；输入关键字后点击「查询」或按回车过滤，支持 Ctrl+C 复制选中行
 5 点击表格行选择域名，再查看该域名的「域名 → 地址池 → 服务成员」引用关系图（节点与连线展示关键参数）
 6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 
