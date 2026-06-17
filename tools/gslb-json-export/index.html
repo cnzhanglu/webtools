@@ -37,6 +37,8 @@
     <button class="btn btn-success" id="btn-export" type="button">💾 导出 CSV</button>
     <button class="btn btn-outline" id="btn-export-domain-list" type="button">📋 导出域名列表 CSV</button>
     <button class="btn btn-outline" id="btn-export-domain-list-txt" type="button">📝 导出域名列表 TXT</button>
+    <button class="btn btn-outline" id="btn-export-orphan-pool" type="button">📦 导出未引用地址池 CSV</button>
+    <button class="btn btn-outline" id="btn-export-orphan-member" type="button">👤 导出未应用服务成员 CSV</button>
     <button class="btn btn-outline" id="btn-help" type="button">📘 工具说明</button>
   </div>
 
@@ -125,10 +127,13 @@
 4. 点击「预览」查看表格；点击某行选择域名，再点「查看关系图」或双击行查看引用拓扑
 5. 点击「导出 CSV」生成明细导出；点击「导出域名列表 CSV」按域名去重聚合导出
 6. 点击「导出域名列表 TXT」可导出空格分隔文本（无标题行）
+7. 点击「导出未引用地址池 CSV」导出未被任何域名引用的地址池（列取自地址池/成员字段选择）
+8. 点击「导出未应用服务成员 CSV」导出未被任何地址池引用的数据中心服务成员（列取自成员字段选择）
 
 导出说明：
 1 可导出域名关联的对象数据
 2 按选中字段顺序导出列
+3 孤儿资源导出复用字段穿梭框中的地址池/成员列配置，不含域名字段
 
 建议使用场景：
 1 运维巡检：检查池、成员状态与 HMS 配置
