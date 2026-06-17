@@ -9,7 +9,7 @@
  *   buildAddRows — 按选定字段顺序展开为「域名×池×成员」扁平行
  *   buildOrphanGpoolRows — 未被域名引用的地址池（池×成员）
  *   buildOrphanGmemberRows — 未被地址池引用的数据中心服务成员
- *   buildTopology — 构建域名-池-成员引用图（供关系图渲染）
+ *   buildTopology — 构建域名-池-成员引用图（池按 gpool_list 顺序，成员按 seq）
  *   buildCsvContent — 带 UTF-8 BOM 的 CSV 文本
  *
  * 依赖：GslbFields（字段名与中英文映射）
@@ -563,6 +563,31 @@ var GslbProcess = (function () {
     return params;
   }
 
+  /** 按 gmember_list 中 seq 数值升序排列（无 seq 的项保持原顺序并排在后面） */
+  function sortMembersBySeq(members) {
+    var indexed = [];
+    var i, gm, seq;
+    for (i = 0; i < members.length; i++) {
+      gm = members[i];
+      if (!gm || typeof gm !== 'object') continue;
+      seq = gm.seq;
+      indexed.push({
+        gm: gm,
+        seq: (seq !== undefined && seq !== null && seq !== '') ? Number(seq) : NaN,
+        idx: i
+      });
+    }
+    indexed.sort(function (a, b) {
+      if (!isNaN(a.seq) && !isNaN(b.seq) && a.seq !== b.seq) return a.seq - b.seq;
+      if (!isNaN(a.seq) && isNaN(b.seq)) return -1;
+      if (isNaN(a.seq) && !isNaN(b.seq)) return 1;
+      return a.idx - b.idx;
+    });
+    var out = [];
+    for (i = 0; i < indexed.length; i++) out.push(indexed[i].gm);
+    return out;
+  }
+
   function buildTopology(jsonData, dcMemberIndex, domainName) {
     var empty = { domains: [], pools: [], members: [], edges: [] };
     if (!jsonData || typeof jsonData !== 'object') return empty;
@@ -572,6 +597,10 @@ var GslbProcess = (function () {
     var domainMap = {};
     var poolMap = {};
     var memberMap = {};
+    var poolOrder = [];
+    var poolOrderIndex = {};
+    var memberOrder = [];
+    var memberOrderIndex = {};
     var edges = [];
     var edgeSeen = {};
     var r, gpRefIdx, gmIdx, dom, gpRefs, gpRef, gpName, gpObj, members, gm;
@@ -620,12 +649,14 @@ var GslbProcess = (function () {
           if (Array.isArray(gpObj.hms)) {
             poolMap[poolId].params.hms = normalizeHmsList(gpObj.hms);
           }
+          poolOrderIndex[poolId] = poolOrder.length;
+          poolOrder.push(poolId);
         }
 
         addEdge('domain:' + domName, poolId, 'domain-pool', pickScalarParams(gpRef));
 
         gpObj = gpMap[gpName] || {};
-        members = (gpObj && typeof gpObj === 'object') ? (gpObj.gmember_list || []) : [];
+        members = (gpObj && typeof gpObj === 'object') ? sortMembersBySeq(gpObj.gmember_list || []) : [];
         for (gmIdx = 0; gmIdx < members.length; gmIdx++) {
           gm = members[gmIdx];
           if (!gm || typeof gm !== 'object') continue;
@@ -647,9 +678,12 @@ var GslbProcess = (function () {
             }
             if (isScalar(dcGm.pass)) memberMap[memberId].params.dc_pass = dcGm.pass;
             if (isScalar(dcGm.enable)) memberMap[memberId].params.enable = dcGm.enable;
+            memberOrderIndex[memberId] = memberOrder.length;
+            memberOrder.push(memberId);
           }
 
           addEdge(poolId, memberId, 'pool-member', {
+            seq: gm.seq !== undefined && gm.seq !== null ? gm.seq : '',
             port: gm.port !== undefined && gm.port !== null ? gm.port : '',
             pool_enable: gm.enable !== undefined && gm.enable !== null ? gm.enable : ''
           });
@@ -671,8 +705,25 @@ var GslbProcess = (function () {
     }
 
     domains.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-    pools.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-    members.sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+
+    // 地址池按 ADD.gpool_list 遍历顺序；成员按「池顺序 → 池内 seq」首次出现顺序
+    // 多池共用同一成员时仅保留一个节点，各池分别连线并在连线上标注该池下的 seq/port
+    pools.sort(function (a, b) {
+      var ia = poolOrderIndex[a.id];
+      var ib = poolOrderIndex[b.id];
+      if (ia !== undefined && ib !== undefined) return ia - ib;
+      if (ia !== undefined) return -1;
+      if (ib !== undefined) return 1;
+      return String(a.name).localeCompare(String(b.name));
+    });
+    members.sort(function (a, b) {
+      var ia = memberOrderIndex[a.id];
+      var ib = memberOrderIndex[b.id];
+      if (ia !== undefined && ib !== undefined) return ia - ib;
+      if (ia !== undefined) return -1;
+      if (ib !== undefined) return 1;
+      return String(a.label).localeCompare(String(b.label));
+    });
 
     return { domains: domains, pools: pools, members: members, edges: edges };
   }

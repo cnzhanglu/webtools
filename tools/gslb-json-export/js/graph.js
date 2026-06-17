@@ -33,6 +33,7 @@ var GslbGraph = (function () {
     pass: '健康有效性',
     hms: '健康检查',
     ratio: '权重',
+    seq: '序号',
     ip: 'IP',
     port: '端口',
     dc_name: '数据中心',
@@ -244,9 +245,13 @@ var GslbGraph = (function () {
       if (edge.params.ratio !== undefined && edge.params.ratio !== '') return 'ratio:' + edge.params.ratio;
       return '';
     }
-    if (edge.params.port !== undefined && edge.params.port !== '') return 'port:' + edge.params.port;
-    if (edge.params.pool_enable !== undefined && edge.params.pool_enable !== '') return '启用:' + edge.params.pool_enable;
-    return '';
+    var parts = [];
+    if (edge.params.seq !== undefined && edge.params.seq !== '') parts.push('seq:' + edge.params.seq);
+    if (edge.params.port !== undefined && edge.params.port !== '') parts.push('port:' + edge.params.port);
+    if (edge.params.pool_enable !== undefined && edge.params.pool_enable !== '') {
+      parts.push('启用:' + edge.params.pool_enable);
+    }
+    return parts.join(' ');
   }
 
   function buildEdgePath(fromNode, toNode) {
