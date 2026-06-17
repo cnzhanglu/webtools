@@ -609,7 +609,7 @@ var GslbApp = (function () {
     var csvContent = GslbProcess.buildCsvContent(columns, rows);
     var filename = 'gslb_orphan_member_' + new Date().toISOString().slice(0, 10) + '.csv';
     BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
-    alert('已导出未应用服务成员 CSV：' + filename);
+    alert('已导出未引用的服务成员 CSV：' + filename);
   }
 
   function showHelp() {
