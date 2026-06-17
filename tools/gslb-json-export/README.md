@@ -4,6 +4,7 @@
 - 导入 GSLB JSON，按域名/地址池/成员字段自由导出
 - 支持方案记忆、预览过滤、关系图可视化
 - 支持 CSV 导出、域名聚合列表 CSV/TXT 导出
+- 支持导出未被域名引用的地址池、未被地址池引用的服务成员
 
 ## 模块逻辑
 1. `app.js/onFileSelected` 读取 JSON
@@ -12,4 +13,5 @@
 4. `process.js/buildAddRows` 生成明细数据
 5. `graph.js/buildTopology + render` 构建并渲染关系图
 6. `process.js/buildCsvContent/buildDomainListRows` 导出数据
+7. `process.js/buildOrphanGpoolRows/buildOrphanGmemberRows` 导出孤儿资源
 

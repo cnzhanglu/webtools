@@ -67,6 +67,8 @@ var GslbApp = (function () {
     document.getElementById('btn-export').addEventListener('click', exportCsv);
     document.getElementById('btn-export-domain-list').addEventListener('click', exportDomainListCsv);
     document.getElementById('btn-export-domain-list-txt').addEventListener('click', exportDomainListTxt);
+    document.getElementById('btn-export-orphan-pool').addEventListener('click', exportOrphanPoolCsv);
+    document.getElementById('btn-export-orphan-member').addEventListener('click', exportOrphanMemberCsv);
     document.getElementById('btn-help').addEventListener('click', showHelp);
     document.getElementById('btn-reset').addEventListener('click', resetAllGroups);
     document.getElementById('btn-close-help').addEventListener('click', hideHelp);
@@ -562,6 +564,54 @@ var GslbApp = (function () {
     alert('已导出域名列表 TXT：' + filename);
   }
 
+  function exportOrphanPoolCsv() {
+    if (!jsonData) {
+      alert('请先导入 JSON。');
+      return;
+    }
+
+    var orders = getOrdersFromGroups();
+    var columns = orders.pool.concat(orders.member);
+    if (!columns.length) {
+      alert('未选择任何地址池或成员字段，无法导出。');
+      return;
+    }
+
+    var rows = GslbProcess.buildOrphanGpoolRows(jsonData, orders, dcMemberIndex);
+    if (!rows.length) {
+      alert('未找到未被域名引用的地址池。');
+      return;
+    }
+    var csvContent = GslbProcess.buildCsvContent(columns, rows);
+    var filename = 'gslb_orphan_pool_' + new Date().toISOString().slice(0, 10) + '.csv';
+    BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
+    alert('已导出未引用地址池 CSV：' + filename);
+  }
+
+  function exportOrphanMemberCsv() {
+    if (!jsonData) {
+      alert('请先导入 JSON。');
+      return;
+    }
+
+    var orders = getOrdersFromGroups();
+    var columns = orders.member.slice();
+    if (!columns.length) {
+      alert('未选择任何成员字段，无法导出。');
+      return;
+    }
+
+    var rows = GslbProcess.buildOrphanGmemberRows(jsonData, orders, dcMemberIndex);
+    if (!rows.length) {
+      alert('未找到未被地址池引用的服务成员。');
+      return;
+    }
+    var csvContent = GslbProcess.buildCsvContent(columns, rows);
+    var filename = 'gslb_orphan_member_' + new Date().toISOString().slice(0, 10) + '.csv';
+    BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
+    alert('已导出未应用服务成员 CSV：' + filename);
+  }
+
   function showHelp() {
     document.getElementById('help-overlay').classList.add('visible');
   }
@@ -609,6 +659,8 @@ var GslbApp = (function () {
     preview: preview,
     exportCsv: exportCsv,
     exportDomainListCsv: exportDomainListCsv,
-    exportDomainListTxt: exportDomainListTxt
+    exportDomainListTxt: exportDomainListTxt,
+    exportOrphanPoolCsv: exportOrphanPoolCsv,
+    exportOrphanMemberCsv: exportOrphanMemberCsv
   };
 })();

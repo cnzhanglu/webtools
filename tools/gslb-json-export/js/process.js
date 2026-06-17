@@ -7,6 +7,8 @@
  * 主要能力：
  *   collectAvailableFields — 扫描 JSON 中出现过的可导出字段
  *   buildAddRows — 按选定字段顺序展开为「域名×池×成员」扁平行
+ *   buildOrphanGpoolRows — 未被域名引用的地址池（池×成员）
+ *   buildOrphanGmemberRows — 未被地址池引用的数据中心服务成员
  *   buildTopology — 构建域名-池-成员引用图（供关系图渲染）
  *   buildCsvContent — 带 UTF-8 BOM 的 CSV 文本
  *
@@ -95,6 +97,160 @@ var GslbProcess = (function () {
       }
     }
     return gpMap;
+  }
+
+  /** 收集所有 ADD 域名 gpool_list 中引用过的地址池名称 */
+  function collectReferencedGpoolNames(jsonData) {
+    var referenced = {};
+    if (!jsonData || typeof jsonData !== 'object') return referenced;
+
+    var addList = getAddList(jsonData);
+    var i, j, dom, gpRefs, gpRef, gpName;
+    for (i = 0; i < addList.length; i++) {
+      dom = addList[i];
+      if (!dom || typeof dom !== 'object') continue;
+      gpRefs = dom.gpool_list || [];
+      for (j = 0; j < gpRefs.length; j++) {
+        gpRef = gpRefs[j];
+        if (!gpRef || typeof gpRef !== 'object') continue;
+        gpName = gpRef.gpool_name || '';
+        if (gpName) referenced[gpName] = true;
+      }
+    }
+    return referenced;
+  }
+
+  /** 收集所有 gpool.gmember_list 中引用过的服务成员键（dc_name + gmember_name） */
+  function collectUsedGmemberKeys(jsonData) {
+    var used = {};
+    if (!jsonData || typeof jsonData !== 'object') return used;
+
+    var pools = jsonData.gpool || [];
+    var i, j, gp, gmemberList, gm, dcName, gmemberName;
+    for (i = 0; i < pools.length; i++) {
+      gp = pools[i];
+      if (!gp || typeof gp !== 'object') continue;
+      gmemberList = gp.gmember_list || [];
+      for (j = 0; j < gmemberList.length; j++) {
+        gm = gmemberList[j];
+        if (!gm || typeof gm !== 'object') continue;
+        dcName = gm.dc_name || '';
+        gmemberName = gm.gmember_name || '';
+        if (dcName && gmemberName) {
+          used[dcName + '\0' + gmemberName] = true;
+        }
+      }
+    }
+    return used;
+  }
+
+  /** 向行对象填充地址池字段（与 buildAddRows 规则一致） */
+  function fillPoolFields(row, orders, gpRef, gpObj) {
+    var refDict = {};
+    var objDict = {};
+    var k, v, f, sub;
+
+    gpRef = gpRef || {};
+    gpObj = (gpObj && typeof gpObj === 'object') ? gpObj : {};
+
+    for (k in gpRef) {
+      if (!Object.prototype.hasOwnProperty.call(gpRef, k)) continue;
+      v = gpRef[k];
+      if (isScalar(v)) {
+        if (k === 'gpool_name') refDict.gpool_name = v;
+        else refDict[k] = v;
+      }
+    }
+
+    for (k in gpObj) {
+      if (!Object.prototype.hasOwnProperty.call(gpObj, k)) continue;
+      v = gpObj[k];
+      if (isScalar(v)) objDict[k] = v;
+    }
+
+    for (f = 0; f < orders.pool.length; f++) {
+      sub = orders.pool[f].replace('pool.', '');
+      if (sub === 'hms') {
+        row[orders.pool[f]] = normalizeHmsList(gpObj.hms || []);
+      } else if (Object.prototype.hasOwnProperty.call(refDict, sub)) {
+        row[orders.pool[f]] = refDict[sub] !== undefined && refDict[sub] !== null ? refDict[sub] : '';
+      } else if (sub === 'gpool_name' && objDict.name !== undefined) {
+        row[orders.pool[f]] = objDict.name !== null ? objDict.name : '';
+      } else {
+        row[orders.pool[f]] = objDict[sub] !== undefined && objDict[sub] !== null ? objDict[sub] : '';
+      }
+    }
+  }
+
+  /** 向行对象填充成员字段（与 buildAddRows 规则一致） */
+  function fillMemberFields(row, orders, gm, dcMemberIndex) {
+    var gmDict = {};
+    var k, v, f, sub, fieldKey, dcName, gmemberName, dcGm;
+
+    if (gm && typeof gm === 'object') {
+      for (k in gm) {
+        if (!Object.prototype.hasOwnProperty.call(gm, k)) continue;
+        v = gm[k];
+        if (isScalar(v)) gmDict[k] = v;
+      }
+    }
+
+    dcName = gmDict.dc_name || '';
+    gmemberName = gmDict.gmember_name || '';
+    dcGm = dcMemberIndex[dcName + '\0' + gmemberName] || {};
+
+    for (f = 0; f < orders.member.length; f++) {
+      fieldKey = orders.member[f];
+      sub = fieldKey.replace('member.', '');
+      if (fieldKey === 'member.dc_hms') {
+        row[fieldKey] = normalizeHmsList(dcGm.hms || []);
+      } else if (fieldKey === 'member.dc_pass') {
+        row[fieldKey] = dcGm.pass !== undefined && dcGm.pass !== null ? dcGm.pass : '';
+      } else if (fieldKey === 'member.enable') {
+        row[fieldKey] = dcGm.enable !== undefined && dcGm.enable !== null ? dcGm.enable : '';
+      } else if (fieldKey === 'member.pool_enable') {
+        row[fieldKey] = gmDict.enable !== undefined && gmDict.enable !== null ? gmDict.enable : '';
+      } else {
+        row[fieldKey] = gmDict[sub] !== undefined && gmDict[sub] !== null ? gmDict[sub] : '';
+      }
+    }
+  }
+
+  /** 扫描 gpool 对象上的可导出池字段 */
+  function scanPoolObjectFields(gpObj, poolSet) {
+    if (!gpObj || typeof gpObj !== 'object') return;
+    var k, v;
+    for (k in gpObj) {
+      if (!Object.prototype.hasOwnProperty.call(gpObj, k)) continue;
+      if (k === 'gmember_list') continue;
+      v = gpObj[k];
+      if (isScalar(v)) {
+        if (k === 'name') poolSet['pool.gpool_name'] = true;
+        else poolSet['pool.' + k] = true;
+      }
+      if (k === 'hms' && Array.isArray(v)) poolSet['pool.hms'] = true;
+    }
+  }
+
+  /** 扫描池成员与 DC 成员上的可导出成员字段 */
+  function scanMemberFields(gmember, dcMemberIndex, memberSet) {
+    if (!gmember || typeof gmember !== 'object') return;
+    var k, v, dcName, gmemberName, dcGm;
+    for (k in gmember) {
+      if (!Object.prototype.hasOwnProperty.call(gmember, k)) continue;
+      v = gmember[k];
+      if (isScalar(v)) memberSet['member.' + k] = true;
+    }
+    if (gmember.enable !== undefined) memberSet['member.pool_enable'] = true;
+
+    dcName = gmember.dc_name || '';
+    gmemberName = gmember.gmember_name || '';
+    dcGm = dcMemberIndex[dcName + '\0' + gmemberName];
+    if (dcGm && typeof dcGm === 'object') {
+      if (Array.isArray(dcGm.hms)) memberSet['member.dc_hms'] = true;
+      if (isScalar(dcGm.pass)) memberSet['member.dc_pass'] = true;
+      if (isScalar(dcGm.enable)) memberSet['member.enable'] = true;
+    }
   }
 
   function mergeOrder(baseKeys, foundSet) {
@@ -191,6 +347,40 @@ var GslbProcess = (function () {
       }
     }
 
+    // 额外扫描全部 gpool 与 data_center.gmembers，覆盖未被域名引用的孤儿对象字段
+    var pools = jsonData.gpool || [];
+    var pi, gi, gpObj2, gmemberList2, gmember2;
+    for (pi = 0; pi < pools.length; pi++) {
+      gpObj2 = pools[pi];
+      if (!gpObj2 || typeof gpObj2 !== 'object') continue;
+      scanPoolObjectFields(gpObj2, pool);
+      gmemberList2 = gpObj2.gmember_list || [];
+      for (gi = 0; gi < gmemberList2.length; gi++) {
+        scanMemberFields(gmemberList2[gi], dcMemberIndex, member);
+      }
+    }
+
+    var dcs = jsonData.data_center || [];
+    var di, dj, dc, dcGm2;
+    for (di = 0; di < dcs.length; di++) {
+      dc = dcs[di];
+      if (!dc || typeof dc !== 'object') continue;
+      var dcNameScan = dc.name || '';
+      var dcGmembers = dc.gmembers || [];
+      for (dj = 0; dj < dcGmembers.length; dj++) {
+        dcGm2 = dcGmembers[dj];
+        if (!dcGm2 || typeof dcGm2 !== 'object') continue;
+        var gmForScan = {};
+        for (k in dcGm2) {
+          if (Object.prototype.hasOwnProperty.call(dcGm2, k)) {
+            gmForScan[k] = dcGm2[k];
+          }
+        }
+        if (dcNameScan && !gmForScan.dc_name) gmForScan.dc_name = dcNameScan;
+        scanMemberFields(gmForScan, dcMemberIndex, member);
+      }
+    }
+
     var baseDom = GslbFields.BASE_SCHEMES['运维巡检'].domain.concat(
       GslbFields.BASE_SCHEMES['排障分析'].domain
     );
@@ -248,70 +438,105 @@ var GslbProcess = (function () {
             row[orders.domain[f]] = dom[sub] !== undefined && dom[sub] !== null ? dom[sub] : '';
           }
 
-          var refDict = {};
-          var k, v;
-          for (k in gpRef) {
-            if (!Object.prototype.hasOwnProperty.call(gpRef, k)) continue;
-            v = gpRef[k];
-            if (isScalar(v)) {
-              if (k === 'gpool_name') refDict.gpool_name = v;
-              else refDict[k] = v;
-            }
-          }
-
-          var objDict = {};
-          if (gpObj && typeof gpObj === 'object') {
-            for (k in gpObj) {
-              if (!Object.prototype.hasOwnProperty.call(gpObj, k)) continue;
-              v = gpObj[k];
-              if (isScalar(v)) objDict[k] = v;
-            }
-          }
-
-          for (f = 0; f < orders.pool.length; f++) {
-            sub = orders.pool[f].replace('pool.', '');
-            if (sub === 'hms') {
-              row[orders.pool[f]] = normalizeHmsList(gpObj.hms || []);
-            } else if (Object.prototype.hasOwnProperty.call(refDict, sub)) {
-              row[orders.pool[f]] = refDict[sub] !== undefined && refDict[sub] !== null ? refDict[sub] : '';
-            } else {
-              row[orders.pool[f]] = objDict[sub] !== undefined && objDict[sub] !== null ? objDict[sub] : '';
-            }
-          }
-
-          var gmDict = {};
-          if (gm && typeof gm === 'object') {
-            for (k in gm) {
-              if (!Object.prototype.hasOwnProperty.call(gm, k)) continue;
-              v = gm[k];
-              if (isScalar(v)) gmDict[k] = v;
-            }
-          }
-
-          var dcName = gmDict.dc_name || '';
-          var gmemberName = gmDict.gmember_name || '';
-          var dcGm = dcMemberIndex[dcName + '\0' + gmemberName] || {};
-
-          for (f = 0; f < orders.member.length; f++) {
-            var fieldKey = orders.member[f];
-            sub = fieldKey.replace('member.', '');
-            if (fieldKey === 'member.dc_hms') {
-              row[fieldKey] = normalizeHmsList(dcGm.hms || []);
-            } else if (fieldKey === 'member.dc_pass') {
-              row[fieldKey] = dcGm.pass !== undefined && dcGm.pass !== null ? dcGm.pass : '';
-            } else if (fieldKey === 'member.enable') {
-              row[fieldKey] = dcGm.enable !== undefined && dcGm.enable !== null ? dcGm.enable : '';
-            } else if (fieldKey === 'member.pool_enable') {
-              row[fieldKey] = gmDict.enable !== undefined && gmDict.enable !== null ? gmDict.enable : '';
-            } else {
-              row[fieldKey] = gmDict[sub] !== undefined && gmDict[sub] !== null ? gmDict[sub] : '';
-            }
-          }
+          fillPoolFields(row, orders, gpRef, gpObj);
+          fillMemberFields(row, orders, gm, dcMemberIndex);
 
           rows.push(row);
           row._domainName = dom.name || '';
         }
       }
+    }
+    return rows;
+  }
+
+  /**
+   * 未被任何 ADD 域名引用的地址池，按「池 × 成员」展开；
+   * 域名字段不填充，池/成员字段规则与 buildAddRows 一致。
+   */
+  function buildOrphanGpoolRows(jsonData, orders, dcMemberIndex) {
+    var rows = [];
+    if (!jsonData || typeof jsonData !== 'object') return rows;
+
+    var referenced = collectReferencedGpoolNames(jsonData);
+    var pools = jsonData.gpool || [];
+    var orphanPools = [];
+    var i, j, gp, gpName, members, gm, row;
+
+    for (i = 0; i < pools.length; i++) {
+      gp = pools[i];
+      if (!gp || typeof gp !== 'object' || !gp.name) continue;
+      if (referenced[gp.name]) continue;
+      orphanPools.push(gp);
+    }
+
+    orphanPools.sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    for (i = 0; i < orphanPools.length; i++) {
+      gp = orphanPools[i];
+      members = gp.gmember_list || [];
+      if (!members.length) members = [null];
+
+      for (j = 0; j < members.length; j++) {
+        gm = members[j];
+        row = {};
+        fillPoolFields(row, orders, {}, gp);
+        fillMemberFields(row, orders, gm, dcMemberIndex);
+        rows.push(row);
+      }
+    }
+    return rows;
+  }
+
+  /**
+   * 未被任何 gpool.gmember_list 引用的数据中心服务成员；
+   * 仅填充 member 字段，dc_name 取自父级 data_center.name。
+   */
+  function buildOrphanGmemberRows(jsonData, orders, dcMemberIndex) {
+    var rows = [];
+    if (!jsonData || typeof jsonData !== 'object') return rows;
+
+    var used = collectUsedGmemberKeys(jsonData);
+    var dcs = jsonData.data_center || [];
+    var orphans = [];
+    var i, j, dc, dcName, gmembers, gm, gmemberName, key, item, row;
+
+    for (i = 0; i < dcs.length; i++) {
+      dc = dcs[i];
+      if (!dc || typeof dc !== 'object') continue;
+      dcName = dc.name || '';
+      gmembers = dc.gmembers || [];
+      for (j = 0; j < gmembers.length; j++) {
+        gm = gmembers[j];
+        if (!gm || typeof gm !== 'object') continue;
+        gmemberName = gm.gmember_name || '';
+        if (!dcName || !gmemberName) continue;
+        key = dcName + '\0' + gmemberName;
+        if (used[key]) continue;
+        orphans.push({ dcName: dcName, gm: gm });
+      }
+    }
+
+    orphans.sort(function (a, b) {
+      var ka = a.dcName + '\0' + (a.gm.gmember_name || '');
+      var kb = b.dcName + '\0' + (b.gm.gmember_name || '');
+      return ka.localeCompare(kb);
+    });
+
+    for (i = 0; i < orphans.length; i++) {
+      item = orphans[i];
+      gm = {};
+      var k;
+      for (k in item.gm) {
+        if (Object.prototype.hasOwnProperty.call(item.gm, k)) {
+          gm[k] = item.gm[k];
+        }
+      }
+      if (!gm.dc_name) gm.dc_name = item.dcName;
+      row = {};
+      fillMemberFields(row, orders, gm, dcMemberIndex);
+      rows.push(row);
     }
     return rows;
   }
@@ -549,6 +774,8 @@ var GslbProcess = (function () {
     buildDcMemberIndex: buildDcMemberIndex,
     collectAvailableFields: collectAvailableFields,
     buildAddRows: buildAddRows,
+    buildOrphanGpoolRows: buildOrphanGpoolRows,
+    buildOrphanGmemberRows: buildOrphanGmemberRows,
     buildDomainListRows: buildDomainListRows,
     buildTopology: buildTopology,
     buildCsvContent: buildCsvContent
