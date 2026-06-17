@@ -12,9 +12,22 @@
   padding: 16px 22px;
   display: flex;
   flex-wrap: wrap;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.op-bar-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.op-bar-row-export {
+  padding-top: 4px;
+  border-top: 1px dashed #dbe3f1;
 }
 
 .op-bar label {

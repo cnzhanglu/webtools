@@ -30,16 +30,20 @@
   <div class="section-title">操作（导入 / 方案 / 预览 / 导出）</div>
   <div class="op-bar">
     <input type="file" id="file-input" accept=".json,application/json">
-    <button class="btn btn-primary" id="btn-load" type="button">📂 导入 JSON</button>
-    <label for="scheme-select">GSLB 配置导出方案：</label>
-    <select id="scheme-select"></select>
-    <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览</button>
-    <button class="btn btn-success" id="btn-export" type="button">💾 导出 CSV</button>
-    <button class="btn btn-outline" id="btn-export-domain-list" type="button">📋 导出域名列表 CSV</button>
-    <button class="btn btn-outline" id="btn-export-domain-list-txt" type="button">📝 导出域名列表 TXT</button>
-    <button class="btn btn-outline" id="btn-export-orphan-pool" type="button">📦 导出未引用地址池 CSV</button>
-    <button class="btn btn-outline" id="btn-export-orphan-member" type="button">👤 导出未引用的服务成员 CSV</button>
-    <button class="btn btn-outline" id="btn-help" type="button">📘 工具说明</button>
+    <div class="op-bar-row">
+      <button class="btn btn-primary" id="btn-load" type="button">📂 导入 JSON</button>
+      <label for="scheme-select">GSLB 配置导出方案：</label>
+      <select id="scheme-select"></select>
+      <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览</button>
+      <button class="btn btn-success" id="btn-export" type="button">💾 导出 CSV</button>
+      <button class="btn btn-outline" id="btn-help" type="button">📘 工具说明</button>
+    </div>
+    <div class="op-bar-row op-bar-row-export">
+      <button class="btn btn-outline" id="btn-export-domain-list" type="button">📋 导出域名列表 CSV</button>
+      <button class="btn btn-outline" id="btn-export-domain-list-txt" type="button">📝 导出域名列表 TXT</button>
+      <button class="btn btn-outline" id="btn-export-orphan-pool" type="button">📦 导出未引用地址池 CSV</button>
+      <button class="btn btn-outline" id="btn-export-orphan-member" type="button">👤 导出未引用的服务成员 CSV</button>
+    </div>
   </div>
 
   <div class="status-bar" id="status-text">状态：尚未加载 JSON</div>
