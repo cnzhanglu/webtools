@@ -2,8 +2,8 @@
  * GSLB JSON 导出 — UI 交互层
  *
  * 数据流：
- *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 预览表（分批渲染）
- *   → 可选关系图 / CSV 导出（UTF-8 BOM）
+ *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
+ *   → 点击查询/回车过滤 → 可选关系图 / CSV 导出（UTF-8 BOM）
  *
  * 模块分工：GslbFields（方案）、GslbTransfer（选列）、GslbProcess（行数据）、
  *          GslbGraph（拓扑图）、BocUtils（下载）
@@ -17,17 +17,20 @@ var GslbApp = (function () {
   var dcMemberIndex = {};
   var previewColumns = [];
   var previewRows = [];
+  var displayRows = [];
   var selectedDomainName = '';
   var filterState = { query: '', scope: 'all' };
   var activeView = 'table';
-  var renderToken = 0;
-  var filterTimer = null;
 
   var groupDomain = null;
   var groupPool = null;
   var groupMember = null;
 
-  var BATCH_SIZE = 180;
+  /** 虚拟滚动：默认行高（首次渲染后按实测值修正） */
+  var ROW_HEIGHT = 34;
+  var measuredRowHeight = 0;
+  var VIRTUAL_OVERSCAN = 6;
+  var scrollRaf = null;
 
   function init() {
     pref = GslbFields.loadPref();
@@ -82,8 +85,13 @@ var GslbApp = (function () {
       refreshFieldLists();
     });
 
-    document.getElementById('filter-query').addEventListener('input', onFilterInput);
-    document.getElementById('filter-scope').addEventListener('change', onFilterChange);
+    document.getElementById('btn-filter-query').addEventListener('click', onFilterQuery);
+    document.getElementById('filter-query').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onFilterQuery();
+      }
+    });
     document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
 
     document.getElementById('tab-table').addEventListener('click', function () { setActiveView('table'); });
@@ -105,6 +113,7 @@ var GslbApp = (function () {
 
     refreshFieldLists();
     updateViewGraphButton();
+    bindVirtualScroll();
     setStatus('状态：尚未加载 JSON');
   }
 
@@ -123,15 +132,9 @@ var GslbApp = (function () {
     }
   }
 
-  function onFilterInput() {
+  /** 从输入框读取条件并执行过滤（点击查询或回车触发） */
+  function onFilterQuery() {
     filterState.query = document.getElementById('filter-query').value;
-    if (filterTimer) clearTimeout(filterTimer);
-    filterTimer = setTimeout(function () {
-      applyFilterAndRender();
-    }, 200);
-  }
-
-  function onFilterChange() {
     filterState.scope = document.getElementById('filter-scope').value;
     applyFilterAndRender();
   }
@@ -142,6 +145,32 @@ var GslbApp = (function () {
     document.getElementById('filter-query').value = '';
     document.getElementById('filter-scope').value = 'all';
     applyFilterAndRender();
+  }
+
+  function syncFilterFromInputs() {
+    filterState.query = document.getElementById('filter-query').value;
+    filterState.scope = document.getElementById('filter-scope').value;
+  }
+
+  function bindVirtualScroll() {
+    var scrollEl = document.getElementById('preview-scroll');
+    if (!scrollEl || scrollEl._vsBound) return;
+    scrollEl._vsBound = true;
+    scrollEl.addEventListener('scroll', onPreviewScroll);
+  }
+
+  function onPreviewScroll() {
+    if (!displayRows.length) return;
+    if (scrollRaf) return;
+    scrollRaf = requestAnimationFrame(function () {
+      scrollRaf = null;
+      renderVirtualSlice();
+    });
+  }
+
+  function resetPreviewScroll() {
+    var scrollEl = document.getElementById('preview-scroll');
+    if (scrollEl) scrollEl.scrollTop = 0;
   }
 
   function setActiveView(view) {
@@ -207,7 +236,7 @@ var GslbApp = (function () {
     }
   }
 
-  function appendTableRow(tbody, row, columns) {
+  function buildTableRow(row, columns) {
     var tr = document.createElement('tr');
     var domainName = row._domainName || row['domain.name'] || '';
     if (domainName) tr.setAttribute('data-domain', domainName);
@@ -219,13 +248,78 @@ var GslbApp = (function () {
       td.title = td.textContent;
       tr.appendChild(td);
     }
-    tbody.appendChild(tr);
+    return tr;
   }
 
-  function renderPreviewTable(rows) {
+  function appendSpacerRow(height, colSpan) {
+    var tr = document.createElement('tr');
+    tr.className = 'virtual-spacer';
+    tr.setAttribute('aria-hidden', 'true');
+    var td = document.createElement('td');
+    td.colSpan = colSpan;
+    td.style.height = height + 'px';
+    tr.appendChild(td);
+    return tr;
+  }
+
+  /** 首次有数据时测量真实行高，供虚拟滚动计算可视窗口 */
+  function ensureRowHeight(columns, sampleRow) {
+    if (measuredRowHeight > 0) return;
+    var tbody = document.getElementById('preview-body');
+    var tr = buildTableRow(sampleRow, columns);
+    tr.style.visibility = 'hidden';
+    tbody.appendChild(tr);
+    measuredRowHeight = tr.offsetHeight || ROW_HEIGHT;
+    tbody.removeChild(tr);
+  }
+
+  /** 按滚动位置仅渲染可视区行 + 上下占位，避免全量 DOM */
+  function renderVirtualSlice() {
+    var scrollEl = document.getElementById('preview-scroll');
+    var tbody = document.getElementById('preview-body');
     var columns = previewColumns;
+    var rows = displayRows;
+    var total = rows.length;
+    var rowHeight = measuredRowHeight || ROW_HEIGHT;
+    var scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+    var viewHeight = scrollEl ? scrollEl.clientHeight : 420;
+    var start = Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN;
+    var visibleCount;
+    var end;
+    var frag;
+    var topHeight;
+    var bottomHeight;
+    var i;
+
+    if (start < 0) start = 0;
+    visibleCount = Math.ceil(viewHeight / rowHeight) + VIRTUAL_OVERSCAN * 2;
+    end = start + visibleCount;
+    if (end > total) end = total;
+
+    frag = document.createDocumentFragment();
+    topHeight = start * rowHeight;
+    if (topHeight > 0) frag.appendChild(appendSpacerRow(topHeight, columns.length));
+
+    for (i = start; i < end; i++) {
+      frag.appendChild(buildTableRow(rows[i], columns));
+    }
+
+    bottomHeight = (total - end) * rowHeight;
+    if (bottomHeight > 0) frag.appendChild(appendSpacerRow(bottomHeight, columns.length));
+
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+    restoreRowSelection();
+  }
+
+  function renderPreviewTable() {
+    var columns = previewColumns;
+    var rows = displayRows;
     var thead = document.getElementById('preview-head');
     var tbody = document.getElementById('preview-body');
+    var trHead;
+    var i;
+
     thead.innerHTML = '';
     tbody.innerHTML = '';
 
@@ -235,8 +329,7 @@ var GslbApp = (function () {
       return;
     }
 
-    var trHead = document.createElement('tr');
-    var i;
+    trHead = document.createElement('tr');
     for (i = 0; i < columns.length; i++) {
       var th = document.createElement('th');
       th.textContent = GslbFields.keyToCn(columns[i]);
@@ -248,38 +341,15 @@ var GslbApp = (function () {
       var emptyTr = document.createElement('tr');
       var emptyTd = document.createElement('td');
       emptyTd.colSpan = columns.length;
-      emptyTd.innerHTML = '<span class="empty-hint">无匹配数据，请调整过滤条件</span>';
+      emptyTd.innerHTML = '<span class="empty-hint">无匹配数据，请调整过滤条件后点击查询</span>';
       emptyTr.appendChild(emptyTd);
       tbody.appendChild(emptyTr);
       updatePreviewBadge(0, previewRows.length);
       return;
     }
 
-    var token = ++renderToken;
-    var idx = 0;
-
-    function renderBatch() {
-      if (token !== renderToken) return;
-      var end = Math.min(idx + BATCH_SIZE, rows.length);
-      for (; idx < end; idx++) {
-        appendTableRow(tbody, rows[idx], columns);
-      }
-      if (idx < rows.length) {
-        requestAnimationFrame(renderBatch);
-      } else {
-        restoreRowSelection();
-      }
-    }
-
-    if (rows.length <= BATCH_SIZE) {
-      for (i = 0; i < rows.length; i++) {
-        appendTableRow(tbody, rows[i], columns);
-      }
-      restoreRowSelection();
-    } else {
-      requestAnimationFrame(renderBatch);
-    }
-
+    ensureRowHeight(columns, rows[0]);
+    renderVirtualSlice();
     updatePreviewBadge(rows.length, previewRows.length);
   }
 
@@ -315,9 +385,19 @@ var GslbApp = (function () {
   }
 
   function applyFilterAndRender() {
-    if (!previewRows.length) return;
-    var filtered = filterRows(previewRows, filterState.query, filterState.scope, previewColumns);
-    renderPreviewTable(filtered);
+    if (!previewColumns.length) {
+      displayRows = [];
+      renderPreviewTable();
+      return;
+    }
+    if (!previewRows.length) {
+      displayRows = [];
+      renderPreviewTable();
+      return;
+    }
+    displayRows = filterRows(previewRows, filterState.query, filterState.scope, previewColumns);
+    resetPreviewScroll();
+    renderPreviewTable();
   }
 
   function onFileSelected(e) {
@@ -336,6 +416,8 @@ var GslbApp = (function () {
       dcMemberIndex = GslbProcess.buildDcMemberIndex(jsonData);
       availableFields = GslbProcess.collectAvailableFields(jsonData, dcMemberIndex);
       previewRows = [];
+      displayRows = [];
+      measuredRowHeight = 0;
       selectedDomainName = '';
       updateViewGraphButton();
       GslbGraph.render(null, null, '');
@@ -449,9 +531,11 @@ var GslbApp = (function () {
 
     previewColumns = columns;
     previewRows = rows;
+    measuredRowHeight = 0;
     selectedDomainName = '';
     updateViewGraphButton();
 
+    syncFilterFromInputs();
     applyFilterAndRender();
     setActiveView('table');
     GslbGraph.render(null, null, '');
