@@ -1,0 +1,138 @@
+/* 字符拼接工具 */
+
+.tj-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-bar {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setting-group > label {
+  font-size: .78rem;
+  font-weight: 700;
+  color: #555;
+}
+
+.sep-group {
+  min-width: 280px;
+}
+.sep-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.sep-row input[type="text"] {
+  width: 120px;
+  padding: 7px 10px;
+  border: 1px solid #d0d7e3;
+  border-radius: 7px;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: .85rem;
+  outline: none;
+}
+.sep-row input[type="text"]:focus {
+  border-color: #2563a8;
+}
+.sep-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.actions-group {
+  flex: 1;
+  min-width: 280px;
+}
+
+.realtime-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .85rem;
+  color: #555;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.realtime-label input {
+  accent-color: #2563a8;
+}
+
+.io-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.io-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 420px;
+}
+.io-label {
+  font-size: .82rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+.stack-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+textarea {
+  flex: 1;
+  min-height: 160px;
+  resize: vertical;
+  border: 1px solid #d0d7e3;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: .85rem;
+  line-height: 1.65;
+  color: #1a1a2e;
+  background: #fafbff;
+  outline: none;
+  transition: border-color .15s;
+  width: 100%;
+}
+textarea:focus { border-color: #2563a8; background: #fff; }
+textarea[readonly] { background: #f4f6fa; }
+
+#result-output {
+  min-height: 360px;
+}
+
+.btn-sm {
+  padding: 3px 10px !important;
+  font-size: .76rem !important;
+}
+
+@media (max-width: 860px) {
+  .io-row { grid-template-columns: 1fr; }
+  .io-col { min-height: auto; }
+  #result-output { min-height: 200px; }
+}

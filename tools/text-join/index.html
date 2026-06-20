@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>字符拼接工具</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>字符拼接工具</h1>
+    <p>按分隔符拆分每行文本，用 $1 $2 占位符模板批量生成目标字符串</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<div class="page-main tj-main">
+
+  <div class="settings-bar">
+    <div class="setting-group sep-group">
+      <label for="separator">分隔符</label>
+      <div class="sep-row">
+        <input type="text" id="separator" value="," placeholder="输入字段分隔符">
+        <div class="sep-presets">
+          <button type="button" class="btn btn-outline btn-sm" onclick="TextJoinApp.setSeparator(',')">,</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="TextJoinApp.setSeparator(' ')">空格</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="TextJoinApp.setSeparator('\t')">Tab</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="TextJoinApp.setSeparator(';')">;</button>
+        </div>
+      </div>
+    </div>
+    <div class="setting-group actions-group">
+      <label>&nbsp;</label>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="TextJoinApp.doConvert()">▶ 转换</button>
+        <button class="btn btn-danger" onclick="TextJoinApp.clearAll()">清空</button>
+        <button class="btn btn-outline" onclick="TextJoinApp.copyResult()">复制结果</button>
+        <button class="btn btn-outline" onclick="TextJoinApp.loadSample()">加载示例</button>
+        <label class="realtime-label">
+          <input type="checkbox" id="realtime-check" checked>
+          实时转换
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>输入与输出</h2>
+      <span class="stat-badge" id="stat-badge">—</span>
+    </div>
+    <div class="panel-body">
+      <div class="io-row">
+        <div class="io-col">
+          <div class="input-stack">
+            <div class="stack-item">
+              <label class="io-label" for="raw-input">原始文本（每行一条）</label>
+              <textarea id="raw-input" placeholder="输入需要处理的原始文本（每行一条）…"></textarea>
+            </div>
+            <div class="stack-item">
+              <label class="io-label" for="pattern-input">转换模式（$1 $2 占位符，从 1 开始）</label>
+              <textarea id="pattern-input" placeholder="输入转换模式（用 $1 $2… 表示拆分后的字段）…&#10;示例：create ip $1 port $2;"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="io-col">
+          <label class="io-label" for="result-output">转换结果</label>
+          <textarea id="result-output" placeholder="转换结果会显示在这里…" readonly></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  工具箱 · 纯静态前端 · 数据不出浏览器<br>
+  <a href="https://github.com/cnzhanglu/webtools" target="_blank" rel="noopener noreferrer">离线文件下载 GitHub</a>
+</footer>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="js/process.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>
