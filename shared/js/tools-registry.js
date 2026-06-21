@@ -96,7 +96,7 @@ var BocToolRegistry = {
     {
       id: 'text-join',
       name: '字符拼接工具',
-      description: '按分隔符拆分每行文本，用 $1 $2 占位符模板批量生成目标字符串，支持实时转换与复制。',
+      description: '按分隔符拆分每行文本，用 $1 $2 占位符模版批量生成目标字符串，支持实时转换、模版历史与固定保存。',
       tags: ['文本', '模板', '拼接'],
       path: 'tools/text-join/index.html',
       status: 'ready',
