@@ -42,6 +42,24 @@
 }
 .setting-group select:focus { border-color: #2563a8; background: #fff; }
 
+.chk-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .86rem;
+  color: #333;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.chk-label input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.compress-only { display: none; }
+.compress-only.visible { display: flex; }
+
 .hint-text {
   font-size: .8rem;
   color: #888;

@@ -12,6 +12,17 @@ var NetSummaryApp = (function () {
   var lastRows = [];
 
   function init() {
+    var modeSelect = document.getElementById('mode-select');
+    var compressOptions = document.getElementById('compress-options');
+
+    function syncCompressOptions() {
+      var isCompress = modeSelect.value === 'compress';
+      compressOptions.classList.toggle('visible', isCompress);
+    }
+
+    modeSelect.addEventListener('change', syncCompressOptions);
+    syncCompressOptions();
+
     document.getElementById('file-input').addEventListener('change', function (e) {
       var file = e.target.files && e.target.files[0];
       if (!file) return;
@@ -62,13 +73,16 @@ var NetSummaryApp = (function () {
   function doSummarize() {
     var raw = document.getElementById('input-area').value;
     var mode = document.getElementById('mode-select').value;
-    var result = NetSummaryProcess.summarize(raw, mode);
+    var options = {
+      allowPrefix31: document.getElementById('allow-prefix-31').checked
+    };
+    var result = NetSummaryProcess.summarize(raw, mode, options);
     lastRows = result.rows;
 
     renderErrors(result.errors);
     renderTable(result.rows);
     renderStats(result.stats);
-    renderReport(result.stats, mode);
+    renderReport(result.stats, mode, options);
   }
 
   function renderStats(stats) {
@@ -78,12 +92,16 @@ var NetSummaryApp = (function () {
       (stats.errorCount ? ' · 错误 ' + stats.errorCount : '');
   }
 
-  function renderReport(stats, mode) {
+  function renderReport(stats, mode, options) {
+    options = options || {};
     var box = document.getElementById('report-box');
+    var compressSuffix = options.allowPrefix31
+      ? '；IPv4 最长 /31 · IPv6 最长 /127'
+      : '；IPv4 最长 /30 · IPv6 最长 /126';
     var modeLabel = {
       strict: '严格模式（仅合并等长连续网段）',
       loose: '宽松模式（允许不等长合并，精确覆盖）',
-      compress: '压缩模式（每个连续区间输出单条最长覆盖 CIDR；IPv4 最长 /30 · IPv6 最长 /126）'
+      compress: '压缩模式（每个连续区间输出单条最长覆盖 CIDR' + compressSuffix + '）'
     }[mode] || mode;
     var superset;
     if (mode === 'compress') {
@@ -95,8 +113,13 @@ var NetSummaryApp = (function () {
         ? '<span class="ok">精确超集校验通过（地址总数一致）</span>'
         : '<span class="warn">注意：合并前后地址总数不一致</span>';
     }
-    box.innerHTML =
-      '<div class="report-line"><b>汇总模式：</b>' + modeLabel + '</div>' +
+
+    var lines = '<div class="report-line"><b>汇总模式：</b>' + modeLabel + '</div>';
+    if (mode === 'compress') {
+      lines += '<div class="report-line"><b>允许 /31 · /127：</b>' +
+        (options.allowPrefix31 ? '是' : '否') + '</div>';
+    }
+    lines +=
       '<div class="report-line"><b>原始条目：</b>' + stats.inputCount +
         '（IPv4 ' + stats.v4In + ' · IPv6 ' + stats.v6In + '）</div>' +
       '<div class="report-line"><b>汇总条目：</b>' + stats.outputCount +
@@ -105,6 +128,7 @@ var NetSummaryApp = (function () {
       '<div class="report-line"><b>原始地址总数：</b>' + stats.origTotal + '</div>' +
       '<div class="report-line"><b>覆盖地址总数：</b>' + stats.mergedTotal + '</div>' +
       '<div class="report-line">' + superset + '</div>';
+    box.innerHTML = lines;
   }
 
   function renderErrors(errors) {

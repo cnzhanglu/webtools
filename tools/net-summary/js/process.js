@@ -47,9 +47,11 @@ var NetSummaryProcess = (function () {
    * 汇总主入口。
    * @param {string} raw 输入文本
    * @param {string} mode 'strict' | 'loose' | 'compress'
+   * @param {Object} [options] compress 模式选项：allowPrefix31（默认 true，允许 /31·/127）
    * @returns 汇总结果对象
    */
-  function summarize(raw, mode) {
+  function summarize(raw, mode, options) {
+    options = options || {};
     var parsed = parseList(raw);
     var entries = parsed.entries;
 
@@ -57,7 +59,10 @@ var NetSummaryProcess = (function () {
     if (mode === 'loose') {
       merged = BocIpCidr.mergeLoose(entries);
     } else if (mode === 'compress') {
-      merged = BocIpCidr.mergeCompress(entries);
+      var allowPrefix31 = options.allowPrefix31 !== false;
+      merged = BocIpCidr.mergeCompress(entries, {
+        allowPrefix31: allowPrefix31
+      });
     } else {
       merged = BocIpCidr.removeContainedBlocks(BocIpCidr.mergeStrict(entries));
     }

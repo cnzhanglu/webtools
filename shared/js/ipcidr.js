@@ -408,8 +408,8 @@ var BocIpCidr = (function () {
 
   /**
    * 压缩模式：单个连续区间输出一条能完整覆盖它的最长 CIDR。
-   * maxPrefix 是允许输出的最长掩码（IPv4 默认 /30、IPv6 默认 /126），用于避免 /31、/32
-   * 这类过细策略；若更细掩码无法覆盖完整区间，则逐步放宽到更粗掩码（如 /24）。
+   * maxPrefix 是允许输出的最长掩码；默认 IPv4 /30、IPv6 /126，勾选允许 /31 时为 /31、/127。
+   * 若更细掩码无法覆盖完整区间，则逐步放宽到更粗掩码（如 /24）。
    */
   function coverIntervalCompress(start, end, family, maxPrefix) {
     var bits = bitsOf(family);
@@ -436,18 +436,21 @@ var BocIpCidr = (function () {
   /**
    * 压缩汇总：区间并集后，每个连续区间输出单条最长覆盖 CIDR（允许输出地址多于输入）。
    * @param {Object[]} entries 已 parseEntry 的条目
-   * @param {Object} opts maxPrefixV4（默认 30）、maxPrefixV6（默认 126）；兼容旧 maxAggPrefix/aggPrefix/minPrefix 名称
+   * @param {Object} opts allowPrefix31（默认 true）、maxPrefixV4、maxPrefixV6；兼容旧参数名
    */
   function mergeCompress(entries, opts) {
     opts = opts || {};
+    var allowPrefix31 = opts.allowPrefix31 !== false;
+    var defaultMaxV4 = allowPrefix31 ? 31 : 30;
+    var defaultMaxV6 = allowPrefix31 ? 127 : 126;
     var maxPrefixV4 = opts.maxPrefixV4 !== undefined ? opts.maxPrefixV4
       : (opts.maxAggPrefixV4 !== undefined ? opts.maxAggPrefixV4
         : (opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
-          : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 30)));
+          : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : defaultMaxV4)));
     var maxPrefixV6 = opts.maxPrefixV6 !== undefined ? opts.maxPrefixV6
       : (opts.maxAggPrefixV6 !== undefined ? opts.maxAggPrefixV6
         : (opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
-          : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 126)));
+          : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : defaultMaxV6)));
     var maxByFamily = { 4: maxPrefixV4, 6: maxPrefixV6 };
 
     var byFamily = { 4: [], 6: [] };
