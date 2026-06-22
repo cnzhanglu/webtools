@@ -4,7 +4,7 @@
  * 数据流：
  *   原始文本（每行一条）
  *     → 按分隔符拆分为字段数组
- *     → 用 $1 $2… 占位符替换模式模板
+ *     → 用 $1 $2… 占位符替换模版文本
  *     → 逐行输出转换结果
  *
  * 占位符规则：$n 对应第 n 个字段（1-based），越界保留原占位符。
@@ -27,8 +27,8 @@ var TextJoinProcess = (function () {
   }
 
   /**
-   * 用字段数组替换模式中的 $n 占位符
-   * @param {string} pattern 转换模式
+   * 用字段数组替换模版中的 $n 占位符
+   * @param {string} pattern 模版文本
    * @param {string[]} fields 字段数组
    */
   function applyPattern(pattern, fields) {
@@ -43,7 +43,7 @@ var TextJoinProcess = (function () {
    * 批量转换
    * @param {string} rawText 原始多行文本
    * @param {string} separator 分隔符（调用方传入原始值，内部会 trim）
-   * @param {string} pattern 转换模式
+   * @param {string} pattern 模版文本
    * @returns {{ lines: string[], lineCount: number }}
    */
   function process(rawText, separator, pattern) {
