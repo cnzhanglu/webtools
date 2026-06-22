@@ -43,7 +43,7 @@ var TextJoinProcess = (function () {
    * 批量转换
    * @param {string} rawText 原始多行文本
    * @param {string} separator 分隔符（调用方传入原始值，内部会 trim）
-   * @param {string} pattern 转换模式
+   * @param {string} pattern 模版文本
    * @returns {{ lines: string[], lineCount: number }}
    */
   function process(rawText, separator, pattern) {
