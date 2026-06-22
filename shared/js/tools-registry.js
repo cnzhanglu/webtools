@@ -32,7 +32,7 @@ var BocToolRegistry = {
     {
       id: 'net-summary',
       name: '网段汇总合并',
-      description: '输入 IP/CIDR/范围（IPv4/IPv6），按严格、宽松或压缩模式合并为网段集；压缩模式每个连续区间输出单条最长覆盖 CIDR（IPv4 最长 /30、IPv6 最长 /126），提供汇总报告、来源映射与 xlsx 导出。',
+      description: '输入 IP/CIDR/范围（IPv4/IPv6），按严格、宽松或压缩模式合并为网段集；压缩模式每个连续区间输出单条最长覆盖 CIDR，可选允许 /31·/127，提供汇总报告、来源映射与 xlsx 导出。',
       tags: ['网络', 'IPv4', 'IPv6', 'CIDR'],
       path: 'tools/net-summary/index.html',
       status: 'ready',

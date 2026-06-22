@@ -33,9 +33,14 @@
       <select id="mode-select">
         <option value="strict">严格（仅合并等长连续网段）</option>
         <option value="loose">宽松（允许不等长合并，精确覆盖）</option>
-        <option value="compress">压缩（单条最长覆盖 CIDR；最长 /30 · /126）</option>
+        <option value="compress">压缩（单条最长覆盖 CIDR）</option>
       </select>
     </div>
+    <div class="setting-group compress-only" id="compress-options">
+      <label class="chk-label">
+        <input type="checkbox" id="allow-prefix-31" checked>
+        允许输出 /31 掩码（IPv6 为 /127）
+      </label>
     <div class="setting-group" style="flex:1">
       <label>说明</label>
       <div class="hint-text">
