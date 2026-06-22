@@ -33,14 +33,14 @@
       <select id="mode-select">
         <option value="strict">严格（仅合并等长连续网段）</option>
         <option value="loose">宽松（允许不等长合并，精确覆盖）</option>
-        <option value="compress">压缩（最长掩码聚合，允许超集；最粗 /25 · /64）</option>
+        <option value="compress">压缩（单条最长覆盖 CIDR；最长 /30 · /126）</option>
       </select>
     </div>
     <div class="setting-group" style="flex:1">
       <label>说明</label>
       <div class="hint-text">
         每行一条，支持 <code>192.168.1.1</code>、<code>192.168.1.0/24</code>、<code>192.168.1.1-192.168.1.255</code> 及 IPv6；<code>#</code> 或 <code>//</code> 开头为注释，空行忽略。<br>
-        <b>压缩模式</b>：优先用尽可能大的对齐网段覆盖（如 <code>10.0.0.1-10.0.0.100</code> → <code>10.0.0.0/25</code>），允许包含额外地址以提高压缩率。
+        <b>压缩模式</b>：每个连续区间输出一条能完整覆盖它的最长 CIDR（如 <code>10.0.0.1-10.0.0.130</code> → <code>10.0.0.0/24</code>），允许包含额外地址。
       </div>
     </div>
     <div class="setting-group" style="margin-left:auto">

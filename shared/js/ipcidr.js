@@ -3,7 +3,7 @@
  *
  * 统一以 BigInt 表示地址，family = 4 (IPv4, 32 bit) 或 6 (IPv6, 128 bit)。
  * 支持三种输入格式：单 IP、CIDR、IP 范围（a-b）。
- * 提供覆盖判定（subnetContains）与严格 / 宽松两种网段合并算法。
+ * 提供覆盖判定（subnetContains）与严格 / 宽松 / 压缩三种网段合并算法。
  *
  * 被 cidr-vs、net-summary、iptables-gen 等工具复用。
  * 导出：BocIpCidr
@@ -407,123 +407,48 @@ var BocIpCidr = (function () {
   }
 
   /**
-   * 判断区间是否恰好等于某个对齐 CIDR；返回最长掩码（前缀最大）的精确表示。
-   * 粗于 maxAggPrefix 的整块（如 /24、/48）若恰好匹配则保留。
+   * 压缩模式：单个连续区间输出一条能完整覆盖它的最长 CIDR。
+   * maxPrefix 是允许输出的最长掩码（IPv4 默认 /30、IPv6 默认 /126），用于避免 /31、/32
+   * 这类过细策略；若更细掩码无法覆盖完整区间，则逐步放宽到更粗掩码（如 /24）。
    */
-  function tryExactCoarseCidr(start, end, family, maxAggPrefix) {
+  function coverIntervalCompress(start, end, family, maxPrefix) {
     var bits = bitsOf(family);
-    maxAggPrefix = Math.max(0, Math.min(bits, maxAggPrefix));
-    for (var p = bits; p >= 0; p--) {
+    maxPrefix = Math.max(0, Math.min(bits, maxPrefix));
+
+    for (var p = maxPrefix; p >= 0; p--) {
       var mask = makeMask(p, bits);
       var base = start & mask;
       var rng = cidrToRange(base, p, family);
-      if (rng.start === start && rng.end === end) {
+      if (rng.start <= start && rng.end >= end) {
         return [{
           base: base,
           prefix: p,
           family: family,
-          start: start,
-          end: end
+          start: rng.start,
+          end: rng.end
         }];
       }
     }
-    return null;
+
+    return [];
   }
 
   /**
-   * 在 [maxAggPrefix, bits] 内查找覆盖 [cur,end] 的块。
-   * 优先最长掩码；若更细块与聚合粒度块均能覆盖且 cur 未对齐到更细块起点，则用聚合粒度块（如 /64 整块）。
-   * @param {boolean} fullCover 是否必须覆盖至 end
-   */
-  function pickCompressBlock(cur, end, family, maxAggPrefix, fullCover) {
-    var bits = bitsOf(family);
-    var finest = null;
-    var p;
-    for (p = bits; p >= maxAggPrefix; p--) {
-      var mask = makeMask(p, bits);
-      var base = cur & mask;
-      var rng = cidrToRange(base, p, family);
-      var coversCur = rng.start <= cur && rng.end >= cur;
-      var coversEnd = rng.end >= end;
-      if (!coversCur) continue;
-      if (fullCover && !coversEnd) continue;
-      if (!finest) {
-        finest = { base: base, prefix: p, family: family, start: rng.start, end: rng.end };
-        continue;
-      }
-      if (fullCover) {
-        if (p > finest.prefix) {
-          finest = { base: base, prefix: p, family: family, start: rng.start, end: rng.end };
-        }
-      } else if (rng.end > finest.end || (rng.end === finest.end && p > finest.prefix)) {
-        finest = { base: base, prefix: p, family: family, start: rng.start, end: rng.end };
-      }
-    }
-
-    if (!finest || finest.prefix <= maxAggPrefix) return finest;
-
-    var aggMask = makeMask(maxAggPrefix, bits);
-    var aggBase = cur & aggMask;
-    var aggRng = cidrToRange(aggBase, maxAggPrefix, family);
-    var aggOk = aggRng.start <= cur && aggRng.end >= cur &&
-      (!fullCover || aggRng.end >= end);
-    if (!aggOk) return finest;
-
-    var fineBase = cur & makeMask(finest.prefix, bits);
-    if (cur !== fineBase) {
-      return {
-        base: aggBase,
-        prefix: maxAggPrefix,
-        family: family,
-        start: aggRng.start,
-        end: aggRng.end
-      };
-    }
-
-    return finest;
-  }
-
-  /**
-   * 压缩模式：允许超集覆盖，优先最长掩码（最细前缀）聚合。
-   * maxAggPrefix 为最粗聚合下限（IPv4 默认 /25、IPv6 默认 /64）：输出前缀不得粗于该值。
-   */
-  function coverIntervalCompress(start, end, family, maxAggPrefix) {
-    maxAggPrefix = Math.max(0, Math.min(bitsOf(family), maxAggPrefix));
-    var blocks = [];
-    var cur = start;
-
-    while (cur <= end) {
-      var chosen = pickCompressBlock(cur, end, family, maxAggPrefix, true);
-      if (chosen) {
-        blocks.push(chosen);
-        break;
-      }
-
-      var step = pickCompressBlock(cur, end, family, maxAggPrefix, false);
-      if (!step) break;
-
-      blocks.push(step);
-      cur = step.end + 1n;
-    }
-
-    return blocks;
-  }
-
-  /**
-   * 压缩汇总：区间并集后按最长掩码策略覆盖（允许输出地址多于输入）。
-   * 已对齐的粗网段（如 /24、/48）整块保留；其余在 maxAggPrefix 下限内取最细前缀。
+   * 压缩汇总：区间并集后，每个连续区间输出单条最长覆盖 CIDR（允许输出地址多于输入）。
    * @param {Object[]} entries 已 parseEntry 的条目
-   * @param {Object} opts maxAggPrefixV4（默认 25）、maxAggPrefixV6（默认 64）；兼容 aggPrefix/minPrefix 旧名
+   * @param {Object} opts maxPrefixV4（默认 30）、maxPrefixV6（默认 126）；兼容旧 maxAggPrefix/aggPrefix/minPrefix 名称
    */
   function mergeCompress(entries, opts) {
     opts = opts || {};
-    var maxAggPrefixV4 = opts.maxAggPrefixV4 !== undefined ? opts.maxAggPrefixV4
-      : (opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
-        : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 25));
-    var maxAggPrefixV6 = opts.maxAggPrefixV6 !== undefined ? opts.maxAggPrefixV6
-      : (opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
-        : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 64));
-    var aggByFamily = { 4: maxAggPrefixV4, 6: maxAggPrefixV6 };
+    var maxPrefixV4 = opts.maxPrefixV4 !== undefined ? opts.maxPrefixV4
+      : (opts.maxAggPrefixV4 !== undefined ? opts.maxAggPrefixV4
+        : (opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
+          : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 30)));
+    var maxPrefixV6 = opts.maxPrefixV6 !== undefined ? opts.maxPrefixV6
+      : (opts.maxAggPrefixV6 !== undefined ? opts.maxAggPrefixV6
+        : (opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
+          : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 126)));
+    var maxByFamily = { 4: maxPrefixV4, 6: maxPrefixV6 };
 
     var byFamily = { 4: [], 6: [] };
     for (var i = 0; i < entries.length; i++) {
@@ -557,12 +482,9 @@ var BocIpCidr = (function () {
       }
       mergedRanges.push(cur);
 
-      var aggP = aggByFamily[fam];
+      var maxP = maxByFamily[fam];
       mergedRanges.forEach(function (mr) {
-        var cidrs = tryExactCoarseCidr(mr.start, mr.end, fam, aggP);
-        if (!cidrs) {
-          cidrs = coverIntervalCompress(mr.start, mr.end, fam, aggP);
-        }
+        var cidrs = coverIntervalCompress(mr.start, mr.end, fam, maxP);
         cidrs.forEach(function (c) {
           results.push({
             base: c.base,
@@ -749,7 +671,6 @@ var BocIpCidr = (function () {
     mergeLoose: mergeLoose,
     mergeCompress: mergeCompress,
     coverIntervalCompress: coverIntervalCompress,
-    tryExactCoarseCidr: tryExactCoarseCidr,
     mergeIntervals: mergeIntervals,
     isRangeCoveredByUnion: isRangeCoveredByUnion,
     removeContainedBlocks: removeContainedBlocks,

@@ -2,8 +2,8 @@
  * 网段汇总 — 输入解析与合并（核心逻辑层）
  *
  * 数据流：多行 IP/CIDR/范围 → BocIpCidr.parseEntry
- *        → mergeStrict（等长连续 CIDR 向上合并）或 mergeLoose（区间并集再拆 CIDR）
- *        → 带来源映射的汇总行 + 超集校验（合并前后地址总数应一致）
+ *        → mergeStrict / mergeLoose / mergeCompress 按模式生成 CIDR
+ *        → 带来源映射的汇总行 + 超集校验（压缩模式允许额外覆盖）
  *
  * 依赖：BocIpCidr
  * 导出：NetSummaryProcess
