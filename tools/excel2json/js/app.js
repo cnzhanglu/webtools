@@ -180,9 +180,19 @@ var Excel2JsonApp = (function () {
 
   function downloadAll() {
     if (!lastResult || !lastResult.outputs.length) return;
+    var tasks = [];
     lastResult.outputs.forEach(function (out) {
-      BocUtils.downloadBlob(JSON.stringify(out.switchData, null, 2), out.switchFilename, 'application/json;charset=utf-8');
-      BocUtils.downloadBlob(JSON.stringify(out.revertData, null, 2), out.revertFilename, 'application/json;charset=utf-8');
+      tasks.push({ data: out.switchData, name: out.switchFilename });
+      tasks.push({ data: out.revertData, name: out.revertFilename });
+    });
+    tasks.forEach(function (task, idx) {
+      setTimeout(function () {
+        BocUtils.downloadBlob(
+          JSON.stringify(task.data, null, 2),
+          task.name,
+          'application/json;charset=utf-8'
+        );
+      }, idx * 350);
     });
   }
 

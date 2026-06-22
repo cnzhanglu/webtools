@@ -119,7 +119,7 @@ var BgpAsApp = (function () {
     }
     rows.forEach(function (r) {
       var tr = document.createElement('tr');
-      [String(r.lineNo), r.raw, String(r.decimal), r.dot, r.kind, r.note].forEach(function (t, i) {
+      [String(r.lineNo), r.raw, String(r.decimal), r.display, r.kind, r.note].forEach(function (t, i) {
         var td = document.createElement('td');
         td.textContent = t;
         if (i === 2 || i === 3) td.className = 'td-mono';
@@ -139,13 +139,17 @@ var BgpAsApp = (function () {
   function clearInput() {
     document.getElementById('input-area').value = '';
     document.getElementById('error-box').classList.remove('visible');
+    lastRows = [];
+    var tbody = document.getElementById('result-body');
+    tbody.innerHTML = '<tr><td colspan="6"><span class="empty-hint">输入 AS 号后点击「转换」</span></td></tr>';
+    document.getElementById('stat-badge').textContent = '—';
   }
 
   function copyResult() {
     if (!lastRows.length) { alert('请先执行转换'); return; }
     var lines = ['行号\t原始输入\t十进制\tASDOT(X.Y)\t类型\t说明'];
     lastRows.forEach(function (r) {
-      lines.push([r.lineNo, r.raw, r.decimal, r.dot, r.kind, r.note].join('\t'));
+      lines.push([r.lineNo, r.raw, r.decimal, r.display, r.kind, r.note].join('\t'));
     });
     BocUtils.copyText(lines.join('\n'));
   }

@@ -29,8 +29,19 @@ var NetSummaryApp = (function () {
     document.getElementById('file-input').click();
   }
 
+  function resetResults() {
+    lastRows = [];
+    document.getElementById('result-body').innerHTML =
+      '<tr><td colspan="5"><span class="empty-hint">输入网段后点击「开始汇总」</span></td></tr>';
+    document.getElementById('report-box').innerHTML = '';
+    document.getElementById('stat-badge').textContent = '—';
+    document.getElementById('error-box').classList.remove('visible');
+    document.getElementById('error-box').innerHTML = '';
+  }
+
   function clearInput() {
     document.getElementById('input-area').value = '';
+    resetResults();
   }
 
   function loadSample() {
@@ -40,7 +51,7 @@ var NetSummaryApp = (function () {
       '192.168.1.0/24\n' +
       '192.168.2.0/25\n' +
       '192.168.2.128/25\n' +
-      '10.0.0.1-10.0.0.255\n' +
+      '10.0.0.1-10.0.0.100\n' +
       '10.0.1.0/24\n' +
       '// 单个地址\n' +
       '172.16.5.5\n' +
@@ -69,10 +80,21 @@ var NetSummaryApp = (function () {
 
   function renderReport(stats, mode) {
     var box = document.getElementById('report-box');
-    var modeLabel = mode === 'loose' ? '宽松模式（允许不等长合并）' : '严格模式（仅合并等长连续网段）';
-    var superset = stats.supersetExact
-      ? '<span class="ok">精确超集校验通过（地址总数一致）</span>'
-      : '<span class="warn">注意：合并前后地址总数不一致</span>';
+    var modeLabel = {
+      strict: '严格模式（仅合并等长连续网段）',
+      loose: '宽松模式（允许不等长合并，精确覆盖）',
+      compress: '压缩模式（每个连续区间输出单条最长覆盖 CIDR；IPv4 最长 /30 · IPv6 最长 /126）'
+    }[mode] || mode;
+    var superset;
+    if (mode === 'compress') {
+      superset = stats.supersetExact
+        ? '<span class="ok">输出地址与输入一致（无额外覆盖）</span>'
+        : '<span class="warn">允许超集：额外覆盖 ' + stats.overflowTotal + ' 个地址</span>';
+    } else {
+      superset = stats.supersetExact
+        ? '<span class="ok">精确超集校验通过（地址总数一致）</span>'
+        : '<span class="warn">注意：合并前后地址总数不一致</span>';
+    }
     box.innerHTML =
       '<div class="report-line"><b>汇总模式：</b>' + modeLabel + '</div>' +
       '<div class="report-line"><b>原始条目：</b>' + stats.inputCount +
@@ -80,6 +102,7 @@ var NetSummaryApp = (function () {
       '<div class="report-line"><b>汇总条目：</b>' + stats.outputCount +
         '（IPv4 ' + stats.v4Out + ' · IPv6 ' + stats.v6Out + '）</div>' +
       '<div class="report-line"><b>压缩率：</b>' + stats.ratio + '%</div>' +
+      '<div class="report-line"><b>原始地址总数：</b>' + stats.origTotal + '</div>' +
       '<div class="report-line"><b>覆盖地址总数：</b>' + stats.mergedTotal + '</div>' +
       '<div class="report-line">' + superset + '</div>';
   }

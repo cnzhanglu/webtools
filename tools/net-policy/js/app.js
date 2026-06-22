@@ -18,10 +18,13 @@ var NetPolicyApp = (function () {
 
   function doProcess() {
     var raw = document.getElementById('input-area').value;
-    if (!raw.trim()) return;
+    if (!raw.trim()) {
+      resetResults();
+      return;
+    }
 
-    var aggPrefixV4 = parseInt(document.getElementById('agg-mask').value, 10);
-    var aggPrefixV6 = parseInt(document.getElementById('agg-mask6').value, 10);
+    var aggPrefixV4 = clampAggPrefix(document.getElementById('agg-mask').value, 32, 24);
+    var aggPrefixV6 = clampAggPrefix(document.getElementById('agg-mask6').value, 128, 64);
     var maxAddr     = parseInt(document.getElementById('max-addr').value, 10) || 0;
     var addrSep     = BocUtils.getSep('sep-preset', 'sep-custom');
     var portSep     = BocUtils.getSep('port-sep-preset', 'port-sep-custom');
@@ -90,9 +93,24 @@ var NetPolicyApp = (function () {
       '共 ' + resultRows.length + ' 行 / ' + total + ' 个地址';
   }
 
+  function clampAggPrefix(val, max, fallback) {
+    var n = parseInt(val, 10);
+    if (isNaN(n)) return fallback;
+    return Math.max(0, Math.min(max, n));
+  }
+
+  function resetResults() {
+    lastResult = [];
+    var tbody = document.getElementById('result-body');
+    tbody.innerHTML = '<tr><td colspan="3"><span class="empty-hint">没有可聚合的数据</span></td></tr>';
+    document.getElementById('stat-badge').textContent = '—';
+    document.getElementById('error-box').classList.remove('visible');
+    document.getElementById('error-box').textContent = '';
+  }
+
   function clearInput() {
     document.getElementById('input-area').value = '';
-    document.getElementById('error-box').classList.remove('visible');
+    resetResults();
   }
 
   function loadSample() {

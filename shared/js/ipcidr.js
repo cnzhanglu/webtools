@@ -3,7 +3,7 @@
  *
  * 统一以 BigInt 表示地址，family = 4 (IPv4, 32 bit) 或 6 (IPv6, 128 bit)。
  * 支持三种输入格式：单 IP、CIDR、IP 范围（a-b）。
- * 提供覆盖判定（subnetContains）与严格 / 宽松两种网段合并算法。
+ * 提供覆盖判定（subnetContains）与严格 / 宽松 / 压缩三种网段合并算法。
  *
  * 被 cidr-vs、net-summary、iptables-gen 等工具复用。
  * 导出：BocIpCidr
@@ -155,7 +155,7 @@ var BocIpCidr = (function () {
    * 返回 { family, start, end, prefix(单 IP/CIDR 时), kind, text } 或抛出 Error。
    */
   function parseEntry(str) {
-    var text = String(str).trim();
+    var text = stripInlineComment(String(str).trim());
     if (!text) throw new Error('空内容');
 
     // 范围：a-b（IPv6 含冒号，连字符仍可区分，因为 IPv6 不含 '-'）
@@ -183,7 +183,7 @@ var BocIpCidr = (function () {
     if (slashIdx !== -1) {
       var ipStr = text.slice(0, slashIdx).trim();
       var prefixStr = text.slice(slashIdx + 1).trim();
-      if (!/^\d{1,3}$/.test(prefixStr)) throw new Error('无效的前缀长度');
+      if (!/^(0|[1-9]\d*)$/.test(prefixStr)) throw new Error('无效的前缀长度');
       var prefix = parseInt(prefixStr, 10);
       var ip = parseSingleIp(ipStr);
       if (!ip) throw new Error('无效的 IP 地址');
@@ -259,10 +259,71 @@ var BocIpCidr = (function () {
     return n;
   }
 
+  function stripInlineComment(text) {
+    return String(text)
+      .replace(/\s+#.*$/, '')
+      .replace(/\s+\/\/.*$/, '')
+      .trim();
+  }
+
+  /** 合并重叠/相邻区间 */
+  function mergeIntervals(intervals) {
+    if (!intervals.length) return [];
+    var sorted = intervals.slice().sort(function (a, b) {
+      if (a.start < b.start) return -1;
+      if (a.start > b.start) return 1;
+      if (a.end < b.end) return -1;
+      if (a.end > b.end) return 1;
+      return 0;
+    });
+    var out = [{ start: sorted[0].start, end: sorted[0].end }];
+    for (var i = 1; i < sorted.length; i++) {
+      var cur = sorted[i];
+      var last = out[out.length - 1];
+      if (cur.start <= last.end + 1n) {
+        if (cur.end > last.end) last.end = cur.end;
+      } else {
+        out.push({ start: cur.start, end: cur.end });
+      }
+    }
+    return out;
+  }
+
+  /** 判断 [start,end] 是否被区间并集完全覆盖 */
+  function isRangeCoveredByUnion(start, end, union) {
+    if (!union.length) return false;
+    var cur = start;
+    var idx = 0;
+    while (cur <= end) {
+      while (idx < union.length && union[idx].end < cur) idx++;
+      if (idx >= union.length || union[idx].start > cur) return false;
+      cur = union[idx].end + 1n;
+    }
+    return true;
+  }
+
   /** 判断 inner 网段是否完全被 outer 覆盖（同族区间包含） */
   function subnetContains(outer, inner) {
     if (outer.family !== inner.family) return false;
     return outer.start <= inner.start && inner.end <= outer.end;
+  }
+
+  /** 移除被其他块完全包含的冗余 CIDR（严格合并后去重） */
+  function removeContainedBlocks(blocks) {
+    var out = [];
+    for (var i = 0; i < blocks.length; i++) {
+      var inner = blocks[i];
+      var contained = false;
+      for (var j = 0; j < blocks.length; j++) {
+        if (i === j) continue;
+        if (subnetContains(blocks[j], inner)) {
+          contained = true;
+          break;
+        }
+      }
+      if (!contained) out.push(inner);
+    }
+    return out;
   }
 
   /** 排序比较：family → start → prefix（窄到宽） */
@@ -343,6 +404,101 @@ var BocIpCidr = (function () {
     }
 
     return dedupeAndSort(blocks);
+  }
+
+  /**
+   * 压缩模式：单个连续区间输出一条能完整覆盖它的最长 CIDR。
+   * maxPrefix 是允许输出的最长掩码（IPv4 默认 /30、IPv6 默认 /126），用于避免 /31、/32
+   * 这类过细策略；若更细掩码无法覆盖完整区间，则逐步放宽到更粗掩码（如 /24）。
+   */
+  function coverIntervalCompress(start, end, family, maxPrefix) {
+    var bits = bitsOf(family);
+    maxPrefix = Math.max(0, Math.min(bits, maxPrefix));
+
+    for (var p = maxPrefix; p >= 0; p--) {
+      var mask = makeMask(p, bits);
+      var base = start & mask;
+      var rng = cidrToRange(base, p, family);
+      if (rng.start <= start && rng.end >= end) {
+        return [{
+          base: base,
+          prefix: p,
+          family: family,
+          start: rng.start,
+          end: rng.end
+        }];
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * 压缩汇总：区间并集后，每个连续区间输出单条最长覆盖 CIDR（允许输出地址多于输入）。
+   * @param {Object[]} entries 已 parseEntry 的条目
+   * @param {Object} opts maxPrefixV4（默认 30）、maxPrefixV6（默认 126）；兼容旧 maxAggPrefix/aggPrefix/minPrefix 名称
+   */
+  function mergeCompress(entries, opts) {
+    opts = opts || {};
+    var maxPrefixV4 = opts.maxPrefixV4 !== undefined ? opts.maxPrefixV4
+      : (opts.maxAggPrefixV4 !== undefined ? opts.maxAggPrefixV4
+        : (opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
+          : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 30)));
+    var maxPrefixV6 = opts.maxPrefixV6 !== undefined ? opts.maxPrefixV6
+      : (opts.maxAggPrefixV6 !== undefined ? opts.maxAggPrefixV6
+        : (opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
+          : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 126)));
+    var maxByFamily = { 4: maxPrefixV4, 6: maxPrefixV6 };
+
+    var byFamily = { 4: [], 6: [] };
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      byFamily[e.family].push({ start: e.start, end: e.end, source: e });
+    }
+
+    var results = [];
+    [4, 6].forEach(function (fam) {
+      var arr = byFamily[fam];
+      if (!arr.length) return;
+      arr.sort(function (a, b) {
+        if (a.start < b.start) return -1;
+        if (a.start > b.start) return 1;
+        if (a.end < b.end) return -1;
+        if (a.end > b.end) return 1;
+        return 0;
+      });
+
+      var mergedRanges = [];
+      var cur = { start: arr[0].start, end: arr[0].end, sources: [arr[0].source] };
+      for (var k = 1; k < arr.length; k++) {
+        var seg = arr[k];
+        if (seg.start <= cur.end + 1n) {
+          if (seg.end > cur.end) cur.end = seg.end;
+          cur.sources.push(seg.source);
+        } else {
+          mergedRanges.push(cur);
+          cur = { start: seg.start, end: seg.end, sources: [seg.source] };
+        }
+      }
+      mergedRanges.push(cur);
+
+      var maxP = maxByFamily[fam];
+      mergedRanges.forEach(function (mr) {
+        var cidrs = coverIntervalCompress(mr.start, mr.end, fam, maxP);
+        cidrs.forEach(function (c) {
+          results.push({
+            base: c.base,
+            prefix: c.prefix,
+            family: fam,
+            start: c.start,
+            end: c.end,
+            sources: mr.sources.slice()
+          });
+        });
+      });
+    });
+
+    return dedupeAndSort(results);
   }
 
   /**
@@ -513,6 +669,11 @@ var BocIpCidr = (function () {
     entryAddressCount: entryAddressCount,
     mergeStrict: mergeStrict,
     mergeLoose: mergeLoose,
+    mergeCompress: mergeCompress,
+    coverIntervalCompress: coverIntervalCompress,
+    mergeIntervals: mergeIntervals,
+    isRangeCoveredByUnion: isRangeCoveredByUnion,
+    removeContainedBlocks: removeContainedBlocks,
     totalAddresses: totalAddresses,
     bitsOf: bitsOf
   };

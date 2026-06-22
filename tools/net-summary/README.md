@@ -2,13 +2,22 @@
 
 ## 功能
 - 输入 IP/CIDR/范围清单并标准化
-- 严格/宽松模式汇总为最小网段集
+- 三种汇总模式：
+  - **严格**：仅合并等长、对齐、连续的兄弟 CIDR
+  - **宽松**：区间并集后精确拆分为最小 CIDR 集
+  - **压缩**：允许超集覆盖；每个连续区间输出一条能完整覆盖它的最长 CIDR，IPv4 最长 /30、IPv6 最长 /126
 - 生成来源映射、报告与 xlsx 导出
+
+## 压缩模式示例
+- 输入 `10.0.0.1-10.0.0.130` → `10.0.0.0/24`（/25 无法覆盖完整区间）
+- 输入 `10.0.0.0-10.0.0.1` → `10.0.0.0/30`（IPv4 最长输出 /30）
+- 输入 `10.0.0.64-10.0.0.127` → `10.0.0.64/26`
+- 输入 `2001:db8::1-2001:db8::2` → `2001:db8::/126`（IPv6 最长输出 /126）
 
 ## 模块逻辑
 1. `app.js/doSummarize` 获取原始文本与模式
 2. `process.js/parseList` 解析条目
 3. `process.js/summarize` 聚合并生成映射统计
-4. `app.js/renderReport/renderTable` 展示
-5. `app.js/exportXlsx` 导出
-
+4. `BocIpCidr.mergeCompress` 执行压缩模式算法
+5. `app.js/renderReport/renderTable` 展示
+6. `app.js/exportXlsx` 导出

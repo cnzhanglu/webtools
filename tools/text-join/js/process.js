@@ -31,7 +31,7 @@ var TextJoinProcess = (function () {
 
   /**
    * 将单行按分隔符拆分为字段
-   * @param {string} line 已 trim 的行文本
+   * @param {string} line 原始行文本（保留字段内首尾空格）
    * @param {string} separator 规范化后的分隔符；空串时不拆分
    */
   function splitFields(line, separator) {
@@ -70,8 +70,8 @@ var TextJoinProcess = (function () {
     var lines = [];
 
     for (var i = 0; i < rawLines.length; i++) {
-      var line = rawLines[i].trim();
-      if (!line) continue;
+      var line = rawLines[i];
+      if (!line.trim()) continue;
 
       var fields = splitFields(line, sep);
       lines.push(applyPattern(trimmedPattern, fields));

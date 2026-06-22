@@ -663,7 +663,7 @@ var GslbProcess = (function () {
 
           dcName = gm.dc_name || '';
           gmemberName = gm.gmember_name || '';
-          memberId = 'member:' + dcName + '\0' + gmemberName + '\0' + (gm.ip || '');
+          memberId = 'member:' + dcName + '\0' + gmemberName + '\0' + (gm.ip || '') + '\0' + (gm.port !== undefined && gm.port !== null ? String(gm.port) : '');
 
           if (!memberMap[memberId]) {
             dcGm = dcMemberIndex[dcName + '\0' + gmemberName] || {};

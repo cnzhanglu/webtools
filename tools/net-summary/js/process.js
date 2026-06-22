@@ -2,8 +2,8 @@
  * 网段汇总 — 输入解析与合并（核心逻辑层）
  *
  * 数据流：多行 IP/CIDR/范围 → BocIpCidr.parseEntry
- *        → mergeStrict（等长连续 CIDR 向上合并）或 mergeLoose（区间并集再拆 CIDR）
- *        → 带来源映射的汇总行 + 超集校验（合并前后地址总数应一致）
+ *        → mergeStrict / mergeLoose / mergeCompress 按模式生成 CIDR
+ *        → 带来源映射的汇总行 + 超集校验（压缩模式允许额外覆盖）
  *
  * 依赖：BocIpCidr
  * 导出：NetSummaryProcess
@@ -46,16 +46,21 @@ var NetSummaryProcess = (function () {
   /**
    * 汇总主入口。
    * @param {string} raw 输入文本
-   * @param {string} mode 'strict' | 'loose'
+   * @param {string} mode 'strict' | 'loose' | 'compress'
    * @returns 汇总结果对象
    */
   function summarize(raw, mode) {
     var parsed = parseList(raw);
     var entries = parsed.entries;
 
-    var merged = mode === 'loose'
-      ? BocIpCidr.mergeLoose(entries)   // 区间并集后拆成最小 CIDR
-      : BocIpCidr.mergeStrict(entries); // 仅合并等长、对齐、相邻的兄弟块
+    var merged;
+    if (mode === 'loose') {
+      merged = BocIpCidr.mergeLoose(entries);
+    } else if (mode === 'compress') {
+      merged = BocIpCidr.mergeCompress(entries);
+    } else {
+      merged = BocIpCidr.removeContainedBlocks(BocIpCidr.mergeStrict(entries));
+    }
 
     var rows = merged.map(function (r, idx) {
       var sources = (r.sources || []).map(function (s) {
@@ -92,6 +97,8 @@ var NetSummaryProcess = (function () {
       ? Math.round((1 - outputCount / inputCount) * 1000) / 10
       : 0;
 
+    var overflowTotal = mergedTotal > origTotal ? (mergedTotal - origTotal).toString() : '0';
+
     return {
       rows: rows,
       errors: parsed.errors,
@@ -104,6 +111,7 @@ var NetSummaryProcess = (function () {
         v4Out: v4Out, v6Out: v6Out,
         origTotal: origTotal.toString(),
         mergedTotal: mergedTotal.toString(),
+        overflowTotal: overflowTotal,
         supersetExact: origTotal === mergedTotal
       }
     };

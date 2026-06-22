@@ -187,9 +187,8 @@ var BocPunycode = (function () {
       if (!label) return label;
       // 如果已经是 ACE 标签，保持不变
       if (/^xn--/i.test(label)) return label.toLowerCase();
-      // 纯 ASCII（含字母数字连字符）→ 不编码，转小写
-      if (/^[A-Za-z0-9-]*$/.test(label)) return label.toLowerCase();
-      // 含非 ASCII → 编码
+      // 纯 ASCII 标签无需 Punycode 编码（含下划线等非 LDH 字符也原样保留）
+      if (!/[^\x00-\x7F]/.test(label)) return label.toLowerCase();
       try {
         var cps = toCodePoints(label.toLowerCase());
         return 'xn--' + encodeLabel(cps);
@@ -218,18 +217,23 @@ var BocPunycode = (function () {
    * 自动检测输入方向并双向转换
    * 返回 { encoded, decoded, direction }
    */
+  function hasAceLabel(domain) {
+    return domain.split('.').some(function (label) {
+      return /^xn--/i.test(label);
+    });
+  }
+
   function autoConvert(input) {
-    var t = input.trim().toLowerCase();
-    // 含 xn-- → 认为是 ACE，解码
-    if (/xn--/.test(t)) {
-      return { direction: 'decode', result: decodeDomain(input.trim()) };
+    var trimmed = input.trim();
+    // 任一标签以 xn-- 开头 → 解码
+    if (hasAceLabel(trimmed)) {
+      return { direction: 'decode', result: decodeDomain(trimmed) };
     }
     // 含非 ASCII → 编码
-    if (/[^\x00-\x7F]/.test(input)) {
-      return { direction: 'encode', result: encodeDomain(input.trim()) };
+    if (/[^\x00-\x7F]/.test(trimmed)) {
+      return { direction: 'encode', result: encodeDomain(trimmed) };
     }
-    // 纯 ASCII → 尝试编码（仍为纯 ASCII，原样返回）
-    return { direction: 'encode', result: encodeDomain(input.trim()) };
+    return { direction: 'encode', result: encodeDomain(trimmed) };
   }
 
   return {

@@ -2,10 +2,9 @@
  * CIDR 网段对比 — 输入解析与覆盖判定（核心逻辑层）
  *
  * 算法：清单 A 为「基准覆盖集」，清单 B 为「待检集」。
- * 对 B 中每条记录，在 A 中找同协议族且区间完全包含它的条目；
- * 多条匹配时取区间最小（最具体）的 A 网段作为 matched。
+ * 对 B 中每条记录，先找单条 A 完全包含；若无，再判断 A 的区间并集是否覆盖 B。
  *
- * 依赖：BocIpCidr（parseEntry、subnetContains、formatCidr）
+ * 依赖：BocIpCidr（parseEntry、subnetContains、mergeIntervals、isRangeCoveredByUnion）
  * 导出：CidrVsProcess
  */
 var CidrVsProcess = (function () {
@@ -44,6 +43,57 @@ var CidrVsProcess = (function () {
     return BocIpCidr.formatCidr(entry.start, entry.prefix, entry.family);
   }
 
+  /** 按协议族构建 A 清单的区间并集 */
+  function buildUnionByFamily(aEntries) {
+    var byFamily = { 4: [], 6: [] };
+    var i;
+    for (i = 0; i < aEntries.length; i++) {
+      var e = aEntries[i];
+      byFamily[e.family].push({ start: e.start, end: e.end });
+    }
+    return {
+      4: BocIpCidr.mergeIntervals(byFamily[4]),
+      6: BocIpCidr.mergeIntervals(byFamily[6])
+    };
+  }
+
+  /** 查找覆盖 B 的 A 条目：单条最具体匹配，或并集覆盖时的多条贡献者 */
+  function findCoverage(b, aEntries, unionByFamily) {
+    var best = null;
+    var j;
+    for (j = 0; j < aEntries.length; j++) {
+      var a = aEntries[j];
+      if (a.family !== b.family) continue;
+      if (BocIpCidr.subnetContains(a, b)) {
+        if (best === null) {
+          best = a;
+        } else {
+          var bestSize = best.end - best.start;
+          var curSize = a.end - a.start;
+          if (curSize < bestSize) best = a;
+        }
+      }
+    }
+    if (best) {
+      return { covered: true, matched: normalizeText(best) };
+    }
+
+    var union = unionByFamily[b.family] || [];
+    if (!BocIpCidr.isRangeCoveredByUnion(b.start, b.end, union)) {
+      return { covered: false, matched: '' };
+    }
+
+    var parts = [];
+    for (j = 0; j < aEntries.length; j++) {
+      var ae = aEntries[j];
+      if (ae.family !== b.family) continue;
+      if (ae.start <= b.end && b.start <= ae.end) {
+        parts.push(normalizeText(ae));
+      }
+    }
+    return { covered: true, matched: parts.join(', ') };
+  }
+
   /**
    * 对比：判断 B 列表中每条是否被 A 列表覆盖。
    * 返回 { rows, stats }，rows = { lineNo, raw, normalized, family, covered, matched }
@@ -52,36 +102,21 @@ var CidrVsProcess = (function () {
     var aResult = parseList(listA);
     var bResult = parseList(listB);
     var aEntries = aResult.entries;
+    var unionByFamily = buildUnionByFamily(aEntries);
 
     var rows = [];
     var coveredCount = 0;
     for (var i = 0; i < bResult.entries.length; i++) {
       var b = bResult.entries[i];
-      var best = null;
-      // 在 A 清单中寻找能完全包含 b 的最具体（区间最小）网段
-      for (var j = 0; j < aEntries.length; j++) {
-        var a = aEntries[j];
-        if (a.family !== b.family) continue;
-        if (BocIpCidr.subnetContains(a, b)) {
-          // 取最具体匹配：区间最小者
-          if (best === null) {
-            best = a;
-          } else {
-            var bestSize = best.end - best.start;
-            var curSize = a.end - a.start;
-            if (curSize < bestSize) best = a;
-          }
-        }
-      }
-      var covered = best !== null;
-      if (covered) coveredCount++;
+      var cov = findCoverage(b, aEntries, unionByFamily);
+      if (cov.covered) coveredCount++;
       rows.push({
         lineNo: b.lineNo,
         raw: b.text,
         normalized: normalizeText(b),
         family: familyLabel(b.family),
-        covered: covered,
-        matched: best ? normalizeText(best) : ''
+        covered: cov.covered,
+        matched: cov.matched
       });
     }
 

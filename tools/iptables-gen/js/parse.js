@@ -61,8 +61,13 @@ var IptablesParse = (function () {
     return m ? m[2] : null;
   }
 
-  /** 结构化推断白名单类型 */
+  /** 结构化推断白名单类型（仅 INPUT 链） */
+  function isInputRule(frag) {
+    return /(?:^|\s)-A\s+INPUT(?:\s|$)/.test(frag);
+  }
+
   function structuralBucket(frag) {
+    if (!isInputRule(frag)) return null;
     if (!/-j\s+ACCEPT/.test(frag)) return null;
     var hasUdp = /-p\s+udp/.test(frag);
     var hasTcp = /-p\s+tcp/.test(frag);
@@ -111,6 +116,7 @@ var IptablesParse = (function () {
       var comment = getComment(frag);
       if (comment && COMMENT_BUCKET[comment]) bucket = COMMENT_BUCKET[comment];
       if (!bucket) bucket = structuralBucket(frag);
+      if (bucket && !isInputRule(frag)) bucket = null;
 
       if (bucket) {
         var src = getSrc(frag);

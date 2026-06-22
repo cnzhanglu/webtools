@@ -61,6 +61,31 @@ var GslbCompareProcess = (function () {
     return index;
   }
 
+  function fillMemberStatuses(row, gm, dcRef, statusKeys) {
+    var s;
+    gm = gm || {};
+    for (s = 0; s < statusKeys.length; s++) {
+      var statusKey = statusKeys[s];
+      if (row.statuses[statusKey] !== undefined && row.statuses[statusKey] !== '') continue;
+      if (statusKey === 'member.pool_enable') {
+        row.statuses[statusKey] = gm.enable !== undefined && gm.enable !== null ? gm.enable : '';
+        continue;
+      }
+      if (statusKey === 'member.enable') {
+        row.statuses[statusKey] = dcRef.enable !== undefined && dcRef.enable !== null ? dcRef.enable : '';
+        continue;
+      }
+      if (statusKey === 'member.dc_pass') {
+        row.statuses[statusKey] = dcRef.pass !== undefined && dcRef.pass !== null ? dcRef.pass : '';
+        continue;
+      }
+      var field = statusKey.replace('member.', '');
+      var value = gm[field];
+      if ((value === undefined || value === null) && isScalar(dcRef[field])) value = dcRef[field];
+      row.statuses[statusKey] = value !== undefined && value !== null ? value : '';
+    }
+  }
+
   function extractRows(jsonData, statusKeys) {
     var rowMap = {};
     var addList = getAddList(jsonData);
@@ -75,18 +100,21 @@ var GslbCompareProcess = (function () {
       var domainType = trimString(dom.type);
 
       var gpRefs = Array.isArray(dom.gpool_list) ? dom.gpool_list : [];
+      if (!gpRefs.length) gpRefs = [{}];
+
       for (p = 0; p < gpRefs.length; p++) {
         var gpRef = gpRefs[p];
-        if (!gpRef || typeof gpRef !== 'object') continue;
+        if (!gpRef || typeof gpRef !== 'object') gpRef = {};
         var gpName = trimString(gpRef.gpool_name);
         var gpObj = gpMap[gpName];
         var members = (gpObj && Array.isArray(gpObj.gmember_list)) ? gpObj.gmember_list : [];
+        if (!members.length) members = [null];
+
         for (m = 0; m < members.length; m++) {
           var gm = members[m];
-          if (!gm || typeof gm !== 'object') continue;
-          var dcName = trimString(gm.dc_name);
-          var gmemberName = trimString(gm.gmember_name);
-          var ip = trimString(gm.ip);
+          var dcName = gm ? trimString(gm.dc_name) : '';
+          var gmemberName = gm ? trimString(gm.gmember_name) : '';
+          var ip = gm ? trimString(gm.ip) : '';
           var key = [domainName, domainType, dcName, gmemberName, ip].join('\0');
           var row = rowMap[key];
           if (!row) {
@@ -97,40 +125,18 @@ var GslbCompareProcess = (function () {
               'member.dc_name': dcName,
               'member.gmember_name': gmemberName,
               'member.ip': ip,
-              'member.port': trimString(gm.port),
+              'member.port': gm ? trimString(gm.port) : '',
               statuses: {}
             };
             rowMap[key] = row;
           }
-          // 若同一 key 下端口存在非空值，则补齐（避免部分字段缺失导致导出为空）
-          if (!row['member.port']) {
+          if (!row['member.port'] && gm) {
             var portCandidate = trimString(gm.port);
             if (portCandidate) row['member.port'] = portCandidate;
           }
 
           var dcRef = dcIndex[dcName + '\0' + gmemberName] || {};
-          for (s = 0; s < statusKeys.length; s++) {
-            var statusKey = statusKeys[s];
-            if (row.statuses[statusKey] !== undefined && row.statuses[statusKey] !== '') continue;
-            if (statusKey === 'member.pool_enable') {
-              row.statuses[statusKey] = gm.enable !== undefined && gm.enable !== null ? gm.enable : '';
-              continue;
-            }
-            if (statusKey === 'member.enable') {
-              row.statuses[statusKey] = dcRef.enable !== undefined && dcRef.enable !== null
-                ? dcRef.enable
-                : (gm.enable !== undefined && gm.enable !== null ? gm.enable : '');
-              continue;
-            }
-            if (statusKey === 'member.dc_pass') {
-              row.statuses[statusKey] = dcRef.pass !== undefined && dcRef.pass !== null ? dcRef.pass : '';
-              continue;
-            }
-            var field = statusKey.replace('member.', '');
-            var value = gm[field];
-            if ((value === undefined || value === null) && isScalar(dcRef[field])) value = dcRef[field];
-            row.statuses[statusKey] = value !== undefined && value !== null ? value : '';
-          }
+          fillMemberStatuses(row, gm, dcRef, statusKeys);
         }
       }
     }
@@ -236,8 +242,9 @@ var GslbCompareProcess = (function () {
             compareValues.push(MISSING);
           } else {
             var vv = item.statuses[sk];
-            out[colName] = vv === undefined || vv === null ? '' : vv;
-            compareValues.push(vv === undefined || vv === null || vv === '' ? MISSING : vv);
+            var displayVal = vv === undefined || vv === null ? '' : vv;
+            out[colName] = displayVal;
+            compareValues.push(displayVal);
           }
         }
         var result = calcStatus(compareValues);
