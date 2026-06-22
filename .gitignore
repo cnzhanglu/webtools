@@ -7,3 +7,8 @@ node_modules/
 !.dev.vars.example
 .env*
 !.env.example
+
+# Go 本地服务 embed 同步目录（由 server/scripts/sync-static.sh 生成）
+server/internal/static/site/
+server/webtools
+server/webtools.exe
