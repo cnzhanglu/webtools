@@ -83,7 +83,7 @@ var NetSummaryApp = (function () {
     var modeLabel = {
       strict: '严格模式（仅合并等长连续网段）',
       loose: '宽松模式（允许不等长合并，精确覆盖）',
-      compress: '压缩模式（允许超集覆盖，粗网段保留；细粒度 IPv4 /25 · IPv6 /64 对齐）'
+      compress: '压缩模式（允许超集覆盖，优先最长掩码聚合；IPv4 最粗 /25 · IPv6 最粗 /64）'
     }[mode] || mode;
     var superset;
     if (mode === 'compress') {

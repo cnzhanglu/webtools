@@ -407,13 +407,13 @@ var BocIpCidr = (function () {
   }
 
   /**
-   * 判断区间是否恰好等于某个对齐 CIDR，且前缀不粗于 aggPrefix（可保留 /24、/48 等整块）。
-   * 从粗到细尝试，返回最粗（前缀最短）的精确匹配。
+   * 判断区间是否恰好等于某个对齐 CIDR；返回最长掩码（前缀最大）的精确表示。
+   * 粗于 maxAggPrefix 的整块（如 /24、/48）若恰好匹配则保留。
    */
-  function tryExactCoarseCidr(start, end, family, aggPrefix) {
+  function tryExactCoarseCidr(start, end, family, maxAggPrefix) {
     var bits = bitsOf(family);
-    aggPrefix = Math.max(0, Math.min(bits, aggPrefix));
-    for (var p = 0; p <= aggPrefix; p++) {
+    maxAggPrefix = Math.max(0, Math.min(bits, maxAggPrefix));
+    for (var p = bits; p >= 0; p--) {
       var mask = makeMask(p, bits);
       var base = start & mask;
       var rng = cidrToRange(base, p, family);
@@ -431,71 +431,99 @@ var BocIpCidr = (function () {
   }
 
   /**
-   * 压缩模式：在允许超集覆盖的前提下，用尽可能大的对齐网段覆盖区间。
-   * aggPrefix 为聚合粒度（IPv4 默认 /25、IPv6 默认 /64）：不拆得更细，但可对非对齐范围超集覆盖。
-   * 优先单块覆盖剩余区间（前缀从 aggPrefix 起向更细尝试，取首个可覆盖块即最大块）；
-   * 否则按 aggPrefix 对齐切块。
+   * 在 [maxAggPrefix, bits] 内查找覆盖 [cur,end] 的块。
+   * 优先最长掩码；若更细块与聚合粒度块均能覆盖且 cur 未对齐到更细块起点，则用聚合粒度块（如 /64 整块）。
+   * @param {boolean} fullCover 是否必须覆盖至 end
    */
-  function coverIntervalCompress(start, end, family, aggPrefix) {
+  function pickCompressBlock(cur, end, family, maxAggPrefix, fullCover) {
     var bits = bitsOf(family);
-    aggPrefix = Math.max(0, Math.min(bits, aggPrefix));
+    var finest = null;
+    var p;
+    for (p = bits; p >= maxAggPrefix; p--) {
+      var mask = makeMask(p, bits);
+      var base = cur & mask;
+      var rng = cidrToRange(base, p, family);
+      var coversCur = rng.start <= cur && rng.end >= cur;
+      var coversEnd = rng.end >= end;
+      if (!coversCur) continue;
+      if (fullCover && !coversEnd) continue;
+      if (!finest) {
+        finest = { base: base, prefix: p, family: family, start: rng.start, end: rng.end };
+        continue;
+      }
+      if (fullCover) {
+        if (p > finest.prefix) {
+          finest = { base: base, prefix: p, family: family, start: rng.start, end: rng.end };
+        }
+      } else if (rng.end > finest.end || (rng.end === finest.end && p > finest.prefix)) {
+        finest = { base: base, prefix: p, family: family, start: rng.start, end: rng.end };
+      }
+    }
+
+    if (!finest || finest.prefix <= maxAggPrefix) return finest;
+
+    var aggMask = makeMask(maxAggPrefix, bits);
+    var aggBase = cur & aggMask;
+    var aggRng = cidrToRange(aggBase, maxAggPrefix, family);
+    var aggOk = aggRng.start <= cur && aggRng.end >= cur &&
+      (!fullCover || aggRng.end >= end);
+    if (!aggOk) return finest;
+
+    var fineBase = cur & makeMask(finest.prefix, bits);
+    if (cur !== fineBase) {
+      return {
+        base: aggBase,
+        prefix: maxAggPrefix,
+        family: family,
+        start: aggRng.start,
+        end: aggRng.end
+      };
+    }
+
+    return finest;
+  }
+
+  /**
+   * 压缩模式：允许超集覆盖，优先最长掩码（最细前缀）聚合。
+   * maxAggPrefix 为最粗聚合下限（IPv4 默认 /25、IPv6 默认 /64）：输出前缀不得粗于该值。
+   */
+  function coverIntervalCompress(start, end, family, maxAggPrefix) {
+    maxAggPrefix = Math.max(0, Math.min(bitsOf(family), maxAggPrefix));
     var blocks = [];
     var cur = start;
 
     while (cur <= end) {
-      var single = null;
-      var p;
-      // 从聚合粒度向更细尝试，首个满足条件的 p 即为可覆盖 [cur,end] 的最大块
-      for (p = aggPrefix; p <= bits; p++) {
-        var mask = makeMask(p, bits);
-        var base = cur & mask;
-        var rng = cidrToRange(base, p, family);
-        if (rng.start <= cur && rng.end >= end) {
-          single = {
-            base: base,
-            prefix: p,
-            family: family,
-            start: rng.start,
-            end: rng.end
-          };
-          break;
-        }
-      }
-
-      if (single) {
-        blocks.push(single);
+      var chosen = pickCompressBlock(cur, end, family, maxAggPrefix, true);
+      if (chosen) {
+        blocks.push(chosen);
         break;
       }
 
-      var tileMask = makeMask(aggPrefix, bits);
-      var tileBase = cur & tileMask;
-      var tileRng = cidrToRange(tileBase, aggPrefix, family);
-      blocks.push({
-        base: tileBase,
-        prefix: aggPrefix,
-        family: family,
-        start: tileRng.start,
-        end: tileRng.end
-      });
-      cur = tileRng.end + 1n;
+      var step = pickCompressBlock(cur, end, family, maxAggPrefix, false);
+      if (!step) break;
+
+      blocks.push(step);
+      cur = step.end + 1n;
     }
 
     return blocks;
   }
 
   /**
-   * 压缩汇总：区间并集后按大块网段覆盖（允许输出地址多于输入）。
-   * 已对齐且粗于聚合粒度的 CIDR（如 /24、/48）整块保留，不拆成 /25、/64 瓦片。
+   * 压缩汇总：区间并集后按最长掩码策略覆盖（允许输出地址多于输入）。
+   * 已对齐的粗网段（如 /24、/48）整块保留；其余在 maxAggPrefix 下限内取最细前缀。
    * @param {Object[]} entries 已 parseEntry 的条目
-   * @param {Object} opts aggPrefixV4（默认 25）、aggPrefixV6（默认 64）；兼容 minPrefixV4/V6
+   * @param {Object} opts maxAggPrefixV4（默认 25）、maxAggPrefixV6（默认 64）；兼容 aggPrefix/minPrefix 旧名
    */
   function mergeCompress(entries, opts) {
     opts = opts || {};
-    var aggPrefixV4 = opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
-      : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 25);
-    var aggPrefixV6 = opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
-      : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 64);
-    var aggByFamily = { 4: aggPrefixV4, 6: aggPrefixV6 };
+    var maxAggPrefixV4 = opts.maxAggPrefixV4 !== undefined ? opts.maxAggPrefixV4
+      : (opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
+        : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 25));
+    var maxAggPrefixV6 = opts.maxAggPrefixV6 !== undefined ? opts.maxAggPrefixV6
+      : (opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
+        : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 64));
+    var aggByFamily = { 4: maxAggPrefixV4, 6: maxAggPrefixV6 };
 
     var byFamily = { 4: [], 6: [] };
     for (var i = 0; i < entries.length; i++) {
