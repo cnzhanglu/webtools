@@ -1,0 +1,136 @@
+name: Release Server
+
+on:
+  push:
+    tags:
+      - 'server-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不含 server-v 前缀，如 1.0.0）'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: linux
+            goarch: amd64
+            ext: ''
+          - goos: linux
+            goarch: arm64
+            ext: ''
+          - goos: darwin
+            goarch: amd64
+            ext: ''
+          - goos: darwin
+            goarch: arm64
+            ext: ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: server/go.sum
+
+      - name: Resolve version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/server-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/server-v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${VERSION}"
+
+      - name: Sync static assets
+        run: bash server/scripts/sync-static.sh
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          mkdir -p dist
+          cd server
+          go mod tidy
+          OUT="webtools-${{ steps.meta.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          go build -ldflags "-s -w -X main.version=${VERSION}" -o "../dist/${OUT}" ./cmd/webtools
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webtools-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/webtools-*
+
+  release:
+    name: create-release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/server-v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Resolve version
+        id: meta
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/server-v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -name 'webtools-*' -exec cp {} release/ \;
+          cat > release/README.txt <<'EOF'
+          工具箱（webtools）本地运行包
+
+          1. 解压后运行对应平台的 webtools 可执行文件
+          2. 浏览器访问 http://127.0.0.1:8080
+          3. 常用参数：
+             --port 8080      监听端口
+             --host 127.0.0.1 监听地址（局域网可用 0.0.0.0）
+             --open           启动后打开浏览器
+             --version        查看版本
+
+          详细说明见仓库 docs/local-server.md
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: webtools server v${{ steps.meta.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
