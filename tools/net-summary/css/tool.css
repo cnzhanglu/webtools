@@ -57,8 +57,16 @@
   height: 16px;
   cursor: pointer;
 }
-.compress-only { display: none; }
-.compress-only.visible { display: flex; }
+/* 压缩模式专属选项：始终占位，避免切换模式时 settings-bar 高度/宽度跳动 */
+.compress-only {
+  visibility: hidden;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.compress-only.visible {
+  visibility: visible;
+  pointer-events: auto;
+}
 
 .hint-text {
   font-size: .8rem;
