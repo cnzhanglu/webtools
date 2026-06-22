@@ -15,9 +15,14 @@ var NetSummaryApp = (function () {
     var modeSelect = document.getElementById('mode-select');
     var compressOptions = document.getElementById('compress-options');
 
+    var allowPrefix31Input = document.getElementById('allow-prefix-31');
+
     function syncCompressOptions() {
       var isCompress = modeSelect.value === 'compress';
       compressOptions.classList.toggle('visible', isCompress);
+      // 非压缩模式禁用并移出 Tab 序，避免隐藏控件仍可聚焦
+      allowPrefix31Input.disabled = !isCompress;
+      allowPrefix31Input.tabIndex = isCompress ? 0 : -1;
     }
 
     modeSelect.addEventListener('change', syncCompressOptions);
@@ -96,8 +101,8 @@ var NetSummaryApp = (function () {
     options = options || {};
     var box = document.getElementById('report-box');
     var compressSuffix = options.allowPrefix31
-      ? '；IPv4 最长 /31 · IPv6 最长 /127'
-      : '；IPv4 最长 /30 · IPv6 最长 /126';
+      ? '；单地址 /32·/128，多地址聚合最长 /31 · /127'
+      : '；单地址 /32·/128，多地址聚合最长 /30 · /126';
     var modeLabel = {
       strict: '严格模式（仅合并等长连续网段）',
       loose: '宽松模式（允许不等长合并，精确覆盖）',
@@ -150,7 +155,7 @@ var NetSummaryApp = (function () {
     var tbody = document.getElementById('result-body');
     tbody.innerHTML = '';
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="6"><span class="empty-hint">没有可汇总的数据</span></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5"><span class="empty-hint">没有可汇总的数据</span></td></tr>';
       return;
     }
     rows.forEach(function (r) {
