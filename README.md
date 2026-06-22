@@ -108,6 +108,7 @@ npx serve .
   2. 在 `shared/js/tools-registry.js` 注册
   3. 在 `sw.js` 增加预缓存并递增 `CACHE_VERSION`
   4. 为该工具补充 `tools/<id>/README.md`
+- **发布前**运行浏览器兼容性检查：`python3 scripts/check-compat.py`（详见 [docs/browser-compat.md](docs/browser-compat.md)）
 
 ## 分支
 

@@ -73,3 +73,11 @@ git checkout dev
 ```
 
 禁止在 main 上直接开发，禁止创建额外长期功能分支（统一使用 dev）。
+
+## 浏览器 / WebView 兼容性
+
+见 [browser-compat.md](browser-compat.md)。发布前执行：
+
+```bash
+python3 scripts/check-compat.py
+```

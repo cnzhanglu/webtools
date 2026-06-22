@@ -1,0 +1,16 @@
+name: Browser compat check
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run static compat checker
+        run: python3 scripts/check-compat.py --baseline chrome86,go-webview-linux
