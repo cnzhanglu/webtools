@@ -407,19 +407,46 @@ var BocIpCidr = (function () {
   }
 
   /**
-   * 压缩模式：在允许超集覆盖的前提下，用尽可能大的对齐网段覆盖区间。
-   * 优先尝试单块覆盖剩余区间；否则按 minPrefix 对齐切块（IPv4 默认 /25，IPv6 默认 /64）。
+   * 判断区间是否恰好等于某个对齐 CIDR，且前缀不粗于 aggPrefix（可保留 /24、/48 等整块）。
+   * 从粗到细尝试，返回最粗（前缀最短）的精确匹配。
    */
-  function coverIntervalCompress(start, end, family, minPrefix) {
+  function tryExactCoarseCidr(start, end, family, aggPrefix) {
     var bits = bitsOf(family);
-    minPrefix = Math.max(0, Math.min(bits, minPrefix));
+    aggPrefix = Math.max(0, Math.min(bits, aggPrefix));
+    for (var p = 0; p <= aggPrefix; p++) {
+      var mask = makeMask(p, bits);
+      var base = start & mask;
+      var rng = cidrToRange(base, p, family);
+      if (rng.start === start && rng.end === end) {
+        return [{
+          base: base,
+          prefix: p,
+          family: family,
+          start: start,
+          end: end
+        }];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 压缩模式：在允许超集覆盖的前提下，用尽可能大的对齐网段覆盖区间。
+   * aggPrefix 为聚合粒度（IPv4 默认 /25、IPv6 默认 /64）：不拆得更细，但可对非对齐范围超集覆盖。
+   * 优先单块覆盖剩余区间（前缀从 aggPrefix 起向更细尝试，取首个可覆盖块即最大块）；
+   * 否则按 aggPrefix 对齐切块。
+   */
+  function coverIntervalCompress(start, end, family, aggPrefix) {
+    var bits = bitsOf(family);
+    aggPrefix = Math.max(0, Math.min(bits, aggPrefix));
     var blocks = [];
     var cur = start;
 
     while (cur <= end) {
       var single = null;
       var p;
-      for (p = minPrefix; p <= bits; p++) {
+      // 从聚合粒度向更细尝试，首个满足条件的 p 即为可覆盖 [cur,end] 的最大块
+      for (p = aggPrefix; p <= bits; p++) {
         var mask = makeMask(p, bits);
         var base = cur & mask;
         var rng = cidrToRange(base, p, family);
@@ -440,12 +467,12 @@ var BocIpCidr = (function () {
         break;
       }
 
-      var tileMask = makeMask(minPrefix, bits);
+      var tileMask = makeMask(aggPrefix, bits);
       var tileBase = cur & tileMask;
-      var tileRng = cidrToRange(tileBase, minPrefix, family);
+      var tileRng = cidrToRange(tileBase, aggPrefix, family);
       blocks.push({
         base: tileBase,
-        prefix: minPrefix,
+        prefix: aggPrefix,
         family: family,
         start: tileRng.start,
         end: tileRng.end
@@ -458,14 +485,17 @@ var BocIpCidr = (function () {
 
   /**
    * 压缩汇总：区间并集后按大块网段覆盖（允许输出地址多于输入）。
+   * 已对齐且粗于聚合粒度的 CIDR（如 /24、/48）整块保留，不拆成 /25、/64 瓦片。
    * @param {Object[]} entries 已 parseEntry 的条目
-   * @param {Object} opts minPrefixV4（默认 25）、minPrefixV6（默认 64）
+   * @param {Object} opts aggPrefixV4（默认 25）、aggPrefixV6（默认 64）；兼容 minPrefixV4/V6
    */
   function mergeCompress(entries, opts) {
     opts = opts || {};
-    var minPrefixV4 = opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 25;
-    var minPrefixV6 = opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 64;
-    var minByFamily = { 4: minPrefixV4, 6: minPrefixV6 };
+    var aggPrefixV4 = opts.aggPrefixV4 !== undefined ? opts.aggPrefixV4
+      : (opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 25);
+    var aggPrefixV6 = opts.aggPrefixV6 !== undefined ? opts.aggPrefixV6
+      : (opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 64);
+    var aggByFamily = { 4: aggPrefixV4, 6: aggPrefixV6 };
 
     var byFamily = { 4: [], 6: [] };
     for (var i = 0; i < entries.length; i++) {
@@ -499,9 +529,12 @@ var BocIpCidr = (function () {
       }
       mergedRanges.push(cur);
 
-      var minP = minByFamily[fam];
+      var aggP = aggByFamily[fam];
       mergedRanges.forEach(function (mr) {
-        var cidrs = coverIntervalCompress(mr.start, mr.end, fam, minP);
+        var cidrs = tryExactCoarseCidr(mr.start, mr.end, fam, aggP);
+        if (!cidrs) {
+          cidrs = coverIntervalCompress(mr.start, mr.end, fam, aggP);
+        }
         cidrs.forEach(function (c) {
           results.push({
             base: c.base,
@@ -688,6 +721,7 @@ var BocIpCidr = (function () {
     mergeLoose: mergeLoose,
     mergeCompress: mergeCompress,
     coverIntervalCompress: coverIntervalCompress,
+    tryExactCoarseCidr: tryExactCoarseCidr,
     mergeIntervals: mergeIntervals,
     isRangeCoveredByUnion: isRangeCoveredByUnion,
     removeContainedBlocks: removeContainedBlocks,
