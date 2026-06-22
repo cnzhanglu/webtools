@@ -407,6 +407,118 @@ var BocIpCidr = (function () {
   }
 
   /**
+   * 压缩模式：在允许超集覆盖的前提下，用尽可能大的对齐网段覆盖区间。
+   * 优先尝试单块覆盖剩余区间；否则按 minPrefix 对齐切块（IPv4 默认 /25，IPv6 默认 /64）。
+   */
+  function coverIntervalCompress(start, end, family, minPrefix) {
+    var bits = bitsOf(family);
+    minPrefix = Math.max(0, Math.min(bits, minPrefix));
+    var blocks = [];
+    var cur = start;
+
+    while (cur <= end) {
+      var single = null;
+      var p;
+      for (p = minPrefix; p <= bits; p++) {
+        var mask = makeMask(p, bits);
+        var base = cur & mask;
+        var rng = cidrToRange(base, p, family);
+        if (rng.start <= cur && rng.end >= end) {
+          single = {
+            base: base,
+            prefix: p,
+            family: family,
+            start: rng.start,
+            end: rng.end
+          };
+          break;
+        }
+      }
+
+      if (single) {
+        blocks.push(single);
+        break;
+      }
+
+      var tileMask = makeMask(minPrefix, bits);
+      var tileBase = cur & tileMask;
+      var tileRng = cidrToRange(tileBase, minPrefix, family);
+      blocks.push({
+        base: tileBase,
+        prefix: minPrefix,
+        family: family,
+        start: tileRng.start,
+        end: tileRng.end
+      });
+      cur = tileRng.end + 1n;
+    }
+
+    return blocks;
+  }
+
+  /**
+   * 压缩汇总：区间并集后按大块网段覆盖（允许输出地址多于输入）。
+   * @param {Object[]} entries 已 parseEntry 的条目
+   * @param {Object} opts minPrefixV4（默认 25）、minPrefixV6（默认 64）
+   */
+  function mergeCompress(entries, opts) {
+    opts = opts || {};
+    var minPrefixV4 = opts.minPrefixV4 !== undefined ? opts.minPrefixV4 : 25;
+    var minPrefixV6 = opts.minPrefixV6 !== undefined ? opts.minPrefixV6 : 64;
+    var minByFamily = { 4: minPrefixV4, 6: minPrefixV6 };
+
+    var byFamily = { 4: [], 6: [] };
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      byFamily[e.family].push({ start: e.start, end: e.end, source: e });
+    }
+
+    var results = [];
+    [4, 6].forEach(function (fam) {
+      var arr = byFamily[fam];
+      if (!arr.length) return;
+      arr.sort(function (a, b) {
+        if (a.start < b.start) return -1;
+        if (a.start > b.start) return 1;
+        if (a.end < b.end) return -1;
+        if (a.end > b.end) return 1;
+        return 0;
+      });
+
+      var mergedRanges = [];
+      var cur = { start: arr[0].start, end: arr[0].end, sources: [arr[0].source] };
+      for (var k = 1; k < arr.length; k++) {
+        var seg = arr[k];
+        if (seg.start <= cur.end + 1n) {
+          if (seg.end > cur.end) cur.end = seg.end;
+          cur.sources.push(seg.source);
+        } else {
+          mergedRanges.push(cur);
+          cur = { start: seg.start, end: seg.end, sources: [seg.source] };
+        }
+      }
+      mergedRanges.push(cur);
+
+      var minP = minByFamily[fam];
+      mergedRanges.forEach(function (mr) {
+        var cidrs = coverIntervalCompress(mr.start, mr.end, fam, minP);
+        cidrs.forEach(function (c) {
+          results.push({
+            base: c.base,
+            prefix: c.prefix,
+            family: fam,
+            start: c.start,
+            end: c.end,
+            sources: mr.sources.slice()
+          });
+        });
+      });
+    });
+
+    return dedupeAndSort(results);
+  }
+
+  /**
    * 宽松模式：所有条目转区间并集，再用 rangeToCidrs 拆为最小 CIDR 集（允许不等长合并）。
    * 结果是原集合的精确超集。
    */
@@ -574,6 +686,8 @@ var BocIpCidr = (function () {
     entryAddressCount: entryAddressCount,
     mergeStrict: mergeStrict,
     mergeLoose: mergeLoose,
+    mergeCompress: mergeCompress,
+    coverIntervalCompress: coverIntervalCompress,
     mergeIntervals: mergeIntervals,
     isRangeCoveredByUnion: isRangeCoveredByUnion,
     removeContainedBlocks: removeContainedBlocks,

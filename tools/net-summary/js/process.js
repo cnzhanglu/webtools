@@ -46,16 +46,21 @@ var NetSummaryProcess = (function () {
   /**
    * 汇总主入口。
    * @param {string} raw 输入文本
-   * @param {string} mode 'strict' | 'loose'
+   * @param {string} mode 'strict' | 'loose' | 'compress'
    * @returns 汇总结果对象
    */
   function summarize(raw, mode) {
     var parsed = parseList(raw);
     var entries = parsed.entries;
 
-    var merged = mode === 'loose'
-      ? BocIpCidr.mergeLoose(entries)
-      : BocIpCidr.removeContainedBlocks(BocIpCidr.mergeStrict(entries));
+    var merged;
+    if (mode === 'loose') {
+      merged = BocIpCidr.mergeLoose(entries);
+    } else if (mode === 'compress') {
+      merged = BocIpCidr.mergeCompress(entries);
+    } else {
+      merged = BocIpCidr.removeContainedBlocks(BocIpCidr.mergeStrict(entries));
+    }
 
     var rows = merged.map(function (r, idx) {
       var sources = (r.sources || []).map(function (s) {
@@ -92,6 +97,8 @@ var NetSummaryProcess = (function () {
       ? Math.round((1 - outputCount / inputCount) * 1000) / 10
       : 0;
 
+    var overflowTotal = mergedTotal > origTotal ? (mergedTotal - origTotal).toString() : '0';
+
     return {
       rows: rows,
       errors: parsed.errors,
@@ -104,6 +111,7 @@ var NetSummaryProcess = (function () {
         v4Out: v4Out, v6Out: v6Out,
         origTotal: origTotal.toString(),
         mergedTotal: mergedTotal.toString(),
+        overflowTotal: overflowTotal,
         supersetExact: origTotal === mergedTotal
       }
     };
