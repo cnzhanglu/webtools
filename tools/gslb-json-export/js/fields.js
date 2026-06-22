@@ -11,6 +11,7 @@ var GslbFields = (function () {
   'use strict';
 
   var PREF_KEY = 'gslb_json_export_pref_v35';
+  var PREF_SCHEMA_VERSION = 42;
 
   var FIELD_MAP = {
     'domain.name': '域名名称',
@@ -89,6 +90,11 @@ var GslbFields = (function () {
         return JSON.parse(JSON.stringify(DEFAULT_PREF));
       }
       var data = JSON.parse(raw);
+      if (data.version !== PREF_SCHEMA_VERSION) {
+        data = JSON.parse(JSON.stringify(DEFAULT_PREF));
+        savePref(data);
+        return data;
+      }
       var k;
       for (k in DEFAULT_PREF) {
         if (!Object.prototype.hasOwnProperty.call(data, k)) {

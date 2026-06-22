@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v22';
+var CACHE_VERSION = 'webtools-v23';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -164,8 +164,11 @@ self.addEventListener('fetch', function (event) {
           caches.open(CACHE_NAME).then(function (cache) {
             cache.put(event.request, copy);
           });
+          return response;
         }
-        return response;
+        return matchNavigateFallback(event.request).then(function (cached) {
+          return cached || response;
+        });
       }).catch(function () {
         return matchNavigateFallback(event.request);
       })

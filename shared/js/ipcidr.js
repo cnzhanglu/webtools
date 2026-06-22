@@ -155,7 +155,7 @@ var BocIpCidr = (function () {
    * 返回 { family, start, end, prefix(单 IP/CIDR 时), kind, text } 或抛出 Error。
    */
   function parseEntry(str) {
-    var text = String(str).trim();
+    var text = stripInlineComment(String(str).trim());
     if (!text) throw new Error('空内容');
 
     // 范围：a-b（IPv6 含冒号，连字符仍可区分，因为 IPv6 不含 '-'）
@@ -183,7 +183,7 @@ var BocIpCidr = (function () {
     if (slashIdx !== -1) {
       var ipStr = text.slice(0, slashIdx).trim();
       var prefixStr = text.slice(slashIdx + 1).trim();
-      if (!/^\d{1,3}$/.test(prefixStr)) throw new Error('无效的前缀长度');
+      if (!/^(0|[1-9]\d*)$/.test(prefixStr)) throw new Error('无效的前缀长度');
       var prefix = parseInt(prefixStr, 10);
       var ip = parseSingleIp(ipStr);
       if (!ip) throw new Error('无效的 IP 地址');
@@ -259,10 +259,71 @@ var BocIpCidr = (function () {
     return n;
   }
 
+  function stripInlineComment(text) {
+    return String(text)
+      .replace(/\s+#.*$/, '')
+      .replace(/\s+\/\/.*$/, '')
+      .trim();
+  }
+
+  /** 合并重叠/相邻区间 */
+  function mergeIntervals(intervals) {
+    if (!intervals.length) return [];
+    var sorted = intervals.slice().sort(function (a, b) {
+      if (a.start < b.start) return -1;
+      if (a.start > b.start) return 1;
+      if (a.end < b.end) return -1;
+      if (a.end > b.end) return 1;
+      return 0;
+    });
+    var out = [{ start: sorted[0].start, end: sorted[0].end }];
+    for (var i = 1; i < sorted.length; i++) {
+      var cur = sorted[i];
+      var last = out[out.length - 1];
+      if (cur.start <= last.end + 1n) {
+        if (cur.end > last.end) last.end = cur.end;
+      } else {
+        out.push({ start: cur.start, end: cur.end });
+      }
+    }
+    return out;
+  }
+
+  /** 判断 [start,end] 是否被区间并集完全覆盖 */
+  function isRangeCoveredByUnion(start, end, union) {
+    if (!union.length) return false;
+    var cur = start;
+    var idx = 0;
+    while (cur <= end) {
+      while (idx < union.length && union[idx].end < cur) idx++;
+      if (idx >= union.length || union[idx].start > cur) return false;
+      cur = union[idx].end + 1n;
+    }
+    return true;
+  }
+
   /** 判断 inner 网段是否完全被 outer 覆盖（同族区间包含） */
   function subnetContains(outer, inner) {
     if (outer.family !== inner.family) return false;
     return outer.start <= inner.start && inner.end <= outer.end;
+  }
+
+  /** 移除被其他块完全包含的冗余 CIDR（严格合并后去重） */
+  function removeContainedBlocks(blocks) {
+    var out = [];
+    for (var i = 0; i < blocks.length; i++) {
+      var inner = blocks[i];
+      var contained = false;
+      for (var j = 0; j < blocks.length; j++) {
+        if (i === j) continue;
+        if (subnetContains(blocks[j], inner)) {
+          contained = true;
+          break;
+        }
+      }
+      if (!contained) out.push(inner);
+    }
+    return out;
   }
 
   /** 排序比较：family → start → prefix（窄到宽） */
@@ -513,6 +574,9 @@ var BocIpCidr = (function () {
     entryAddressCount: entryAddressCount,
     mergeStrict: mergeStrict,
     mergeLoose: mergeLoose,
+    mergeIntervals: mergeIntervals,
+    isRangeCoveredByUnion: isRangeCoveredByUnion,
+    removeContainedBlocks: removeContainedBlocks,
     totalAddresses: totalAddresses,
     bitsOf: bitsOf
   };

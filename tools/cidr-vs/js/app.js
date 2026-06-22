@@ -35,8 +35,18 @@ var CidrVsApp = (function () {
     document.getElementById(inputId).click();
   }
 
+  function resetResults() {
+    lastRows = [];
+    document.getElementById('result-body').innerHTML =
+      '<tr><td colspan="6"><span class="empty-hint">输入网段后点击「开始对比」</span></td></tr>';
+    document.getElementById('stat-badge').textContent = '—';
+    document.getElementById('error-box').classList.remove('visible');
+    document.getElementById('error-box').innerHTML = '';
+  }
+
   function clearInput(textareaId) {
     document.getElementById(textareaId).value = '';
+    resetResults();
   }
 
   function loadSample() {

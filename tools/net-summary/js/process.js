@@ -54,8 +54,8 @@ var NetSummaryProcess = (function () {
     var entries = parsed.entries;
 
     var merged = mode === 'loose'
-      ? BocIpCidr.mergeLoose(entries)   // 区间并集后拆成最小 CIDR
-      : BocIpCidr.mergeStrict(entries); // 仅合并等长、对齐、相邻的兄弟块
+      ? BocIpCidr.mergeLoose(entries)
+      : BocIpCidr.removeContainedBlocks(BocIpCidr.mergeStrict(entries));
 
     var rows = merged.map(function (r, idx) {
       var sources = (r.sources || []).map(function (s) {

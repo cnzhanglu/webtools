@@ -46,6 +46,14 @@ var SubnetCalcIp = (function () {
       groups = left.concat(zeros, right);
     } else {
       groups = str.split(':');
+      if (groups.length > 0 && groups[groups.length - 1].indexOf('.') !== -1) {
+        var tailV4 = parseIPv4Int(groups[groups.length - 1]);
+        if (tailV4 === null) return null;
+        groups = groups.slice(0, -1).concat([
+          ((tailV4 >>> 16) & 0xffff).toString(16),
+          (tailV4 & 0xffff).toString(16)
+        ]);
+      }
     }
 
     if (groups.length !== 8) return null;

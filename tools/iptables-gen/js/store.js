@@ -76,8 +76,8 @@ var IptablesStore = (function () {
 
     if (obj.templates && obj.templates.v4 && obj.templates.v6) {
       project.templates = {
-        v4: normalizeTemplate(obj.templates.v4),
-        v6: normalizeTemplate(obj.templates.v6)
+        v4: normalizeTemplate(obj.templates.v4, 'v4'),
+        v6: normalizeTemplate(obj.templates.v6, 'v6')
       };
     }
 
@@ -105,11 +105,12 @@ var IptablesStore = (function () {
     });
     if (Array.isArray(s.extraRules)) st.extraRules = s.extraRules.map(String);
     if (Array.isArray(s.disabledPrefixIds)) st.disabledPrefixIds = s.disabledPrefixIds.map(String);
-    if (s.templateOverride) st.templateOverride = normalizeTemplate(s.templateOverride);
+    if (s.templateOverride) st.templateOverride = normalizeTemplate(s.templateOverride, stack);
     return st;
   }
 
-  function normalizeTemplate(t) {
+  function normalizeTemplate(t, stack) {
+    stack = stack === 'v6' ? 'v6' : 'v4';
     var out = { prefixRules: [], whitelistDefs: [], suffixRules: [] };
     if (Array.isArray(t.prefixRules)) {
       out.prefixRules = t.prefixRules.map(function (r) {
@@ -132,7 +133,7 @@ var IptablesStore = (function () {
     }
     // 至少回退到默认，避免空模板
     if (!out.prefixRules.length && !out.suffixRules.length && !out.whitelistDefs.length) {
-      return T.defaultTemplate('v4');
+      return T.defaultTemplate(stack);
     }
     return out;
   }

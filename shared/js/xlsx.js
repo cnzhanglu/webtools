@@ -22,7 +22,20 @@ var BocXlsx = (function () {
   }
 
   function cellValue(s) {
-    return escX(s).replace(/\n/g, '&#10;');
+    var str = String(s);
+    if (/^[=+\-@]/.test(str)) str = "'" + str;
+    return escX(str).replace(/\n/g, '&#10;');
+  }
+
+  function colName(index) {
+    var n = index + 1;
+    var name = '';
+    while (n > 0) {
+      n--;
+      name = String.fromCharCode(65 + (n % 26)) + name;
+      n = Math.floor(n / 26);
+    }
+    return name;
   }
 
   function u16le(n) { return [n & 0xff, (n >> 8) & 0xff]; }
@@ -117,7 +130,7 @@ var BocXlsx = (function () {
     }).join('\n');
 
     var headerCells = headers.map(function (h, i) {
-      var col = String.fromCharCode(65 + i);
+      var col = colName(i);
       return '    <c r="' + col + '1" t="inlineStr" s="1"><is><t>' + escX(h) + '</t></is></c>';
     }).join('\n');
 
@@ -128,7 +141,9 @@ var BocXlsx = (function () {
       var cells  = mapper(rows[r], rowNum);
       var cellXml = cells.map(function (c) {
         if (c.type === 'n') {
-          return '    <c r="' + c.col + rowNum + '" t="n"><v>' + c.value + '</v></c>';
+          var num = Number(c.value);
+          if (!isFinite(num)) num = 0;
+          return '    <c r="' + c.col + rowNum + '" t="n"><v>' + num + '</v></c>';
         }
         return '    <c r="' + c.col + rowNum + '" t="inlineStr" s="' + (c.style || 2) + '"><is><t xml:space="preserve">' + cellValue(c.value) + '</t></is></c>';
       }).join('\n');

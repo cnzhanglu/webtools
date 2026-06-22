@@ -19,6 +19,7 @@ var GslbApp = (function () {
   var previewRows = [];
   var displayRows = [];
   var selectedDomainName = '';
+  var selectedRowIndices = {};
   var filterState = { query: '', scope: 'all' };
   var activeView = 'table';
 
@@ -236,10 +237,14 @@ var GslbApp = (function () {
     }
   }
 
-  function buildTableRow(row, columns) {
+  function buildTableRow(row, columns, rowIndex) {
     var tr = document.createElement('tr');
     var domainName = row._domainName || row['domain.name'] || '';
     if (domainName) tr.setAttribute('data-domain', domainName);
+    if (rowIndex !== undefined && rowIndex !== null) {
+      tr.setAttribute('data-row-index', String(rowIndex));
+      if (selectedRowIndices[String(rowIndex)]) tr.classList.add('selected');
+    }
     var c;
     for (c = 0; c < columns.length; c++) {
       var td = document.createElement('td');
@@ -301,7 +306,7 @@ var GslbApp = (function () {
     if (topHeight > 0) frag.appendChild(appendSpacerRow(topHeight, columns.length));
 
     for (i = start; i < end; i++) {
-      frag.appendChild(buildTableRow(rows[i], columns));
+      frag.appendChild(buildTableRow(rows[i], columns, i));
     }
 
     bottomHeight = (total - end) * rowHeight;
@@ -533,6 +538,7 @@ var GslbApp = (function () {
     previewRows = rows;
     measuredRowHeight = 0;
     selectedDomainName = '';
+    selectedRowIndices = {};
     updateViewGraphButton();
 
     syncFilterFromInputs();
@@ -542,45 +548,43 @@ var GslbApp = (function () {
   }
 
   function copySelection() {
-    var table = document.getElementById('preview-table');
-    var selected = table.querySelectorAll('tbody tr.selected');
-    if (!selected.length) {
+    if (!previewColumns.length || !displayRows.length) return;
+
+    var rowsToCopy = [];
+    var keys = Object.keys(selectedRowIndices);
+    var i;
+
+    if (keys.length) {
+      keys.sort(function (a, b) { return Number(a) - Number(b); });
+      for (i = 0; i < keys.length; i++) {
+        rowsToCopy.push(displayRows[Number(keys[i])]);
+      }
+    } else if (selectedDomainName) {
+      for (i = 0; i < displayRows.length; i++) {
+        var dn = displayRows[i]._domainName || displayRows[i]['domain.name'] || '';
+        if (dn === selectedDomainName) rowsToCopy.push(displayRows[i]);
+      }
+    } else {
       var active = document.activeElement;
       if (active && active.tagName === 'TD' && active.parentElement) {
-        selected = [active.parentElement];
-      } else {
-        return;
+        var idx = active.parentElement.getAttribute('data-row-index');
+        if (idx !== null) rowsToCopy.push(displayRows[Number(idx)]);
       }
     }
 
-    var headers = [];
-    var ths = table.querySelectorAll('thead th');
-    var i, r, c, row, cells, line, lines;
-    for (i = 0; i < ths.length; i++) {
-      headers.push(ths[i].textContent);
-    }
-    lines = [headers.join('\t')];
+    if (!rowsToCopy.length) return;
 
-    for (r = 0; r < selected.length; r++) {
-      row = selected[r];
-      cells = row.querySelectorAll('td');
-      line = [];
-      for (c = 0; c < cells.length; c++) {
-        line.push(cells[c].textContent);
-      }
+    var headers = previewColumns.map(function (c) { return GslbFields.keyToCn(c); });
+    var lines = [headers.join('\t')];
+    for (i = 0; i < rowsToCopy.length; i++) {
+      var row = rowsToCopy[i];
+      var line = previewColumns.map(function (c) {
+        var val = row[c];
+        return val === null || val === undefined ? '' : String(val);
+      });
       lines.push(line.join('\t'));
     }
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(lines.join('\n')).catch(function () {});
-    } else {
-      var ta = document.createElement('textarea');
-      ta.value = lines.join('\n');
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
+    BocUtils.copyText(lines.join('\n'));
   }
 
   function exportCsv() {
@@ -711,6 +715,11 @@ var GslbApp = (function () {
       if (!tr || !tbody.contains(tr) || !tr.getAttribute('data-domain')) return;
 
       if (e.ctrlKey || e.metaKey) {
+        var rowIdx = tr.getAttribute('data-row-index');
+        if (rowIdx !== null) {
+          if (selectedRowIndices[rowIdx]) delete selectedRowIndices[rowIdx];
+          else selectedRowIndices[rowIdx] = true;
+        }
         tr.classList.toggle('selected');
         if (tr.classList.contains('selected')) {
           selectDomainFromRow(tr);

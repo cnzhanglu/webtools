@@ -36,11 +36,14 @@ var SubnetCalcCore = (function () {
 
     if (prefix === 128) return { count: 1n, display: '1' };
     if (prefix === 127) return { count: 2n, display: '2' };
+    if (prefix <= 0) {
+      var allHosts = 1n << BigInt(hostBits);
+      return { count: allHosts, display: formatBigInt(allHosts) };
+    }
     if (hostBits > 100) {
       return { count: null, display: '2^' + hostBits + '（约 ' + formatBigInt(1n << BigInt(Math.min(hostBits, 60))) + (hostBits > 60 ? '…' : '') + '）' };
     }
     var c6 = 1n << BigInt(hostBits);
-    if (prefix <= 0) return { count: c6, display: formatBigInt(c6) };
     if (prefix === bits - 1) return { count: 2n, display: '2' };
     return { count: c6 - 2n, display: formatBigInt(c6 - 2n) };
   }

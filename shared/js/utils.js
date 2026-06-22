@@ -36,7 +36,7 @@ var BocUtils = (function () {
     });
   }
 
-  /** 复制文本到剪贴板，带降级方案 */
+  /** 复制文本到剪贴板，带降级方案；失败时不误报成功 */
   function copyText(text, okMsg) {
     okMsg = okMsg || '已复制到剪贴板！';
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -49,13 +49,22 @@ var BocUtils = (function () {
   }
 
   function fallbackCopy(text, okMsg) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    alert(okMsg);
+    var ok = false;
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) {
+      ok = false;
+    }
+    if (ok) alert(okMsg);
+    else alert('复制失败，请手动选择并复制');
   }
 
   /** 触发文件下载 */

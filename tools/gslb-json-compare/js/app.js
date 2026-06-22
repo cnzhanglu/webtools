@@ -129,8 +129,28 @@ var GslbCompareApp = (function () {
       right.className = 'file-count';
       right.textContent = '记录：' + (f.rowCount || 0);
       item.appendChild(right);
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn btn-outline btn-sm';
+      removeBtn.textContent = '移除';
+      removeBtn.setAttribute('data-id', f.fileId);
+      removeBtn.addEventListener('click', removeFile);
+      item.appendChild(removeBtn);
+
       root.appendChild(item);
     }
+  }
+
+  function removeFile(e) {
+    var id = e.target.getAttribute('data-id');
+    files = files.filter(function (f) { return f.fileId !== id; });
+    lastRows = [];
+    lastColumns = [];
+    renderFileList();
+    renderTable([]);
+    document.getElementById('preview-badge').textContent = '—';
+    setStatus(files.length ? '状态：已加载 ' + files.length + ' 个文件' : '状态：暂无文件');
   }
 
   function onDisplayNameInput(e) {

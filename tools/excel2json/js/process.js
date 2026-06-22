@@ -34,55 +34,9 @@ var Excel2JsonProcess = (function () {
     var dataRows = rows.filter(function (r) { return r.rowIndex > 1; });
 
     /* 2. 按 A 列分组；A 列空值行跳过 */
-    var groups   = {};  /* appName → { dynamic: [], static: [] } */
+    var groups   = {};
     var appOrder = [];
-
-    dataRows.forEach(function (row) {
-      var app  = (row.A || '').trim();
-      if (!app) return;
-
-      var fqdn = (row.D || '').trim();
-      var rawE = row.E || '';
-      var rawF = row.F || '';
-      var type = (row.G || '').trim();
-
-      /* G 非 动态/静态 → 跳过，不报错 */
-      if (type !== '动态' && type !== '静态') return;
-
-      /* 域名校验 */
-      var domErr = Excel2JsonValidate.checkDomain(fqdn, row.rowIndex);
-      if (domErr) {
-        return { error: '[行 ' + row.rowIndex + ' 列 D] ' + domErr };
-      }
-
-      if (!groups[app]) {
-        groups[app] = { dynamic: [], static: [] };
-        appOrder.push(app);
-      }
-
-      if (type === '动态') {
-        var eRes = Excel2JsonValidate.validateMultipleIPs(rawE, row.rowIndex, 'E');
-        if (eRes.error) return throwErr(eRes.error);
-        var fRes = Excel2JsonValidate.validateMultipleIPs(rawF, row.rowIndex, 'F');
-        if (fRes.error) return throwErr(fRes.error);
-        groups[app].dynamic.push({ fqdn: fqdn, eIps: eRes.ips, fIps: fRes.ips, rowIndex: row.rowIndex });
-      } else {
-        var eRes2 = Excel2JsonValidate.validateSingleIP(rawE, row.rowIndex, 'E');
-        if (eRes2.error) return throwErr(eRes2.error);
-        var fRes2 = Excel2JsonValidate.validateSingleIP(rawF, row.rowIndex, 'F');
-        if (fRes2.error) return throwErr(fRes2.error);
-        groups[app].static.push({ fqdn: fqdn, eIp: eRes2.ip, fIp: fRes2.ip, rowIndex: row.rowIndex });
-      }
-    });
-
-    /* helper — 校验失败时抛出（用 try/catch 捕获） */
-    var _pendingError = null;
-    function throwErr(msg) { _pendingError = msg; }
-
-    /* 重跑一遍，这次真正校验并收集错误（前面 forEach 里 return 的是局部 return，不影响外层） */
-    _pendingError = null;
-    groups    = {};
-    appOrder  = [];
+    var seenFqdn = {};
 
     for (var ri = 0; ri < dataRows.length; ri++) {
       var row  = dataRows[ri];
@@ -100,7 +54,12 @@ var Excel2JsonProcess = (function () {
       var domErr = Excel2JsonValidate.checkDomain(fqdn, row.rowIndex);
       if (domErr) return { ok: false, error: '[行 ' + row.rowIndex + ' 列 D] ' + domErr };
 
-      if (!groups[app]) { groups[app] = { dynamic: [], static: [] }; appOrder.push(app); }
+      if (!groups[app]) { groups[app] = { dynamic: [], static: [] }; appOrder.push(app); seenFqdn[app] = { dynamic: {}, static: {} }; }
+
+      var typeKey = type === '动态' ? 'dynamic' : 'static';
+      if (seenFqdn[app][typeKey][fqdn]) {
+        return { ok: false, error: '[行 ' + row.rowIndex + '] 应用「' + app + '」下 FQDN「' + fqdn + '」重复（' + type + '）' };
+      }
 
       if (type === '动态') {
         var eRes = Excel2JsonValidate.validateMultipleIPs(rawE, row.rowIndex, 'E');
@@ -114,6 +73,7 @@ var Excel2JsonProcess = (function () {
           return { ok: false, error: '[行 ' + row.rowIndex + '] 动态类型 E/F 列 IP 完全相同，差分后 address 与 new_address 均为空，请检查数据' };
         }
         groups[app].dynamic.push({ fqdn: fqdn, eIps: eRes.ips, fIps: fRes.ips });
+        seenFqdn[app].dynamic[fqdn] = true;
       } else {
         var eRes2 = Excel2JsonValidate.validateSingleIP(rawE, row.rowIndex, 'E');
         if (eRes2.error) return { ok: false, error: eRes2.error };
@@ -124,6 +84,7 @@ var Excel2JsonProcess = (function () {
           return { ok: false, error: '[行 ' + row.rowIndex + '] 静态类型 E/F 列均为空，切换前后地址不能同时缺失' };
         }
         groups[app].static.push({ fqdn: fqdn, eIp: eRes2.ip, fIp: fRes2.ip });
+        seenFqdn[app].static[fqdn] = true;
       }
     }
 

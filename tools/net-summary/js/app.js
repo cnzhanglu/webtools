@@ -29,8 +29,19 @@ var NetSummaryApp = (function () {
     document.getElementById('file-input').click();
   }
 
+  function resetResults() {
+    lastRows = [];
+    document.getElementById('result-body').innerHTML =
+      '<tr><td colspan="5"><span class="empty-hint">输入网段后点击「开始汇总」</span></td></tr>';
+    document.getElementById('report-box').innerHTML = '';
+    document.getElementById('stat-badge').textContent = '—';
+    document.getElementById('error-box').classList.remove('visible');
+    document.getElementById('error-box').innerHTML = '';
+  }
+
   function clearInput() {
     document.getElementById('input-area').value = '';
+    resetResults();
   }
 
   function loadSample() {

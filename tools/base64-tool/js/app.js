@@ -114,11 +114,13 @@ var Base64App = (function () {
     var reader = new FileReader();
     reader.onload = function (ev) {
       _fileBytes = new Uint8Array(ev.target.result);
+      _fileB64 = '';
       setFileStatus(
         '已加载：' + _fileName + '（' + fmtSize(_fileBytes.length) + '）',
         ''
       );
       document.getElementById('btn-encode-file').disabled = false;
+      document.getElementById('btn-save-b64').disabled = true;
       document.getElementById('file-b64-output').value = '';
     };
     reader.onerror = function () { alert('读取文件失败'); };
