@@ -17,9 +17,22 @@ var TextJoinProcess = (function () {
   var PLACEHOLDER_RE = /\$(\d+)/g;
 
   /**
+   * 规范化分隔符：去除首尾无意义空白，但保留纯空白分隔符（空格、Tab）
+   * @param {string} separator 用户输入的分隔符
+   */
+  function normalizeSeparator(separator) {
+    var raw = String(separator || '');
+    if (!raw.length) return '';
+    var trimmed = raw.trim();
+    // 用户明确输入了分隔符，但 strip 后为空（如单个空格、Tab），仍按原字符拆分
+    if (!trimmed.length) return raw;
+    return trimmed;
+  }
+
+  /**
    * 将单行按分隔符拆分为字段
    * @param {string} line 已 trim 的行文本
-   * @param {string} separator 经 trim 后的分隔符；空串时不拆分
+   * @param {string} separator 规范化后的分隔符；空串时不拆分
    */
   function splitFields(line, separator) {
     if (!separator) return [line];
@@ -42,7 +55,7 @@ var TextJoinProcess = (function () {
   /**
    * 批量转换
    * @param {string} rawText 原始多行文本
-   * @param {string} separator 分隔符（调用方传入原始值，内部会 trim）
+   * @param {string} separator 分隔符（支持空格、Tab 等纯空白字符）
    * @param {string} pattern 模版文本
    * @returns {{ lines: string[], lineCount: number }}
    */
@@ -52,7 +65,7 @@ var TextJoinProcess = (function () {
       return { lines: [], lineCount: 0 };
     }
 
-    var sep = String(separator || '').trim();
+    var sep = normalizeSeparator(separator);
     var rawLines = String(rawText || '').split(/\r?\n/);
     var lines = [];
 
@@ -70,6 +83,7 @@ var TextJoinProcess = (function () {
   return {
     process: process,
     splitFields: splitFields,
-    applyPattern: applyPattern
+    applyPattern: applyPattern,
+    normalizeSeparator: normalizeSeparator
   };
 })();
