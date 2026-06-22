@@ -408,14 +408,20 @@ var BocIpCidr = (function () {
 
   /**
    * 压缩模式：单个连续区间输出一条能完整覆盖它的最长 CIDR。
-   * maxPrefix 是允许输出的最长掩码；默认 IPv4 /30、IPv6 /126，勾选允许 /31 时为 /31、/127。
+   * maxPrefix 是允许输出的最长「聚合」掩码；默认 IPv4 /30、IPv6 /126，勾选允许 /31 时为 /31、/127。
+   *
+   * 关键约定：单地址（/32 · /128）始终允许，maxPrefix 只约束「合并 2 个及以上地址」的块。
+   * 因此从最细 /bits 开始向粗尝试，跳过 maxPrefix 与 /bits 之间被禁用的掩码长度，
+   * 保证 10.0.0.1-10.0.0.1 这类单地址输出 /32 而非被强行套上 /31。
    * 若更细掩码无法覆盖完整区间，则逐步放宽到更粗掩码（如 /24）。
    */
   function coverIntervalCompress(start, end, family, maxPrefix) {
     var bits = bitsOf(family);
     maxPrefix = Math.max(0, Math.min(bits, maxPrefix));
 
-    for (var p = maxPrefix; p >= 0; p--) {
+    for (var p = bits; p >= 0; p--) {
+      // /bits 为精确单地址，恒允许；其余掩码须不长于 maxPrefix（禁用 /31·/127 时跳过）
+      if (p !== bits && p > maxPrefix) continue;
       var mask = makeMask(p, bits);
       var base = start & mask;
       var rng = cidrToRange(base, p, family);

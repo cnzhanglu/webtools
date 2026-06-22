@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v29';
+var CACHE_VERSION = 'webtools-v30';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
