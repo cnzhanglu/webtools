@@ -93,7 +93,7 @@
 
 ### 方式一：Go 单二进制（推荐，无需 Python/Node）
 
-从 [GitHub Releases](https://github.com/cnzhanglu/webtools/releases) 下载对应平台的 `webtools` 可执行文件，运行后访问 `http://127.0.0.1:8080`。
+从 [webtools-goBuild Releases](https://github.com/cnzhanglu/webtools-goBuild/releases) 下载对应平台的 `webtools` 可执行文件，运行后访问 `http://127.0.0.1:8080`。
 
 ```bash
 ./webtools              # 默认 127.0.0.1:8080
@@ -101,7 +101,7 @@
 ./webtools --host 0.0.0.0 --port 9000   # 局域网可访问
 ```
 
-详见 [docs/local-server.md](docs/local-server.md) 与 [server/README.md](server/README.md)。
+Go 构建源码在独立仓库 [cnzhanglu/webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild)。详见 [docs/local-server.md](docs/local-server.md)。
 
 ### 方式二：简易 HTTP 服务
 
