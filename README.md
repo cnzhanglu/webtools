@@ -46,6 +46,7 @@
     ├── gslb-json-export/
     ├── gslb-json-compare/
     ├── iptables-gen/
+    ├── text-join/
     └── excel2json/
 ```
 
@@ -64,6 +65,7 @@
 | GSLB JSON 导出 | `tools/gslb-json-export/` | 字段选择、预览过滤、关系图、CSV/TXT 导出 | [tools/gslb-json-export/README.md](tools/gslb-json-export/README.md) |
 | GSLB 多文件对比 | `tools/gslb-json-compare/` | 多文件状态横向对比与 Excel 导出 | [tools/gslb-json-compare/README.md](tools/gslb-json-compare/README.md) |
 | iptables 规则生成 | `tools/iptables-gen/` | 模板化规则生成、校验、导入导出 | [tools/iptables-gen/README.md](tools/iptables-gen/README.md) |
+| 字符拼接工具 | `tools/text-join/` | 占位符模版批量拼接文本 | [tools/text-join/README.md](tools/text-join/README.md) |
 | Excel 切换 JSON（定制） | `tools/excel2json/` | Excel 解析并生成切换/回切 JSON | [tools/excel2json/README.md](tools/excel2json/README.md) |
 
 ## 公共模块逻辑

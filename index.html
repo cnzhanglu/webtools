@@ -75,6 +75,7 @@
   <a href="https://github.com/cnzhanglu/webtools" target="_blank" rel="noopener noreferrer">离线文件下载 GitHub</a>
 </footer>
 
+<script src="shared/js/utils.js"></script>
 <script src="shared/js/tools-registry.js"></script>
 <script>
 /**
@@ -85,18 +86,22 @@
   var gridPublic = document.getElementById('tool-grid-public');
   var gridSpecial = document.getElementById('tool-grid-special');
 
+  function esc(s) {
+    return BocUtils.escHtml(s);
+  }
+
   function renderToolCard(grid, tool) {
     var card = document.createElement('a');
     card.className = 'tool-card' + (tool.status !== 'ready' ? ' disabled' : '');
     card.href = tool.status === 'ready' ? tool.path : '#';
 
     var tagsHtml = (tool.tags || []).map(function (t) {
-      return '<span class="tag">' + t + '</span>';
+      return '<span class="tag">' + esc(t) + '</span>';
     }).join('');
 
     card.innerHTML =
-      '<h3>' + tool.name + '</h3>' +
-      '<p>' + tool.description + '</p>' +
+      '<h3>' + esc(tool.name) + '</h3>' +
+      '<p>' + esc(tool.description) + '</p>' +
       '<div class="tag-row">' + tagsHtml + '</div>' +
       (tool.status !== 'ready' ? '<span class="tag">即将上线</span>' : '');
 

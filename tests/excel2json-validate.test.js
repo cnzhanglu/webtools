@@ -12,12 +12,11 @@ module.exports = function (test, assert, assertEq) {
     );
   });
 
-  test('validateMultipleIPs 规范化输出', function () {
+  test('validateMultipleIPs 规范化并去重', function () {
     var res = Excel2JsonValidate.validateMultipleIPs('2001:db8::1\n2001:0db8::1', 2, 'E');
     assertEq(res.error, null);
-    assertEq(res.ips.length, 2);
+    assertEq(res.ips.length, 1);
     assertEq(res.ips[0], '2001:db8::1');
-    assertEq(res.ips[1], '2001:db8::1');
   });
 
   test('validateSingleIP 拒绝多行', function () {

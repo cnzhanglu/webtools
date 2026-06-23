@@ -41,15 +41,39 @@ function assertEq(a, b, msg) {
   if (a !== b) throw new Error((msg || 'not equal') + ': ' + JSON.stringify(a) + ' !== ' + JSON.stringify(b));
 }
 
-// 按依赖顺序加载被测模块
-loadScript('shared/js/ipcidr.js');
+loadScript('shared/js/utils.js');
+console.log('\nBocUtils');
+require('./utils.test.js')(test, assert, assertEq);
 
+loadScript('shared/js/ipcidr.js');
 console.log('\nBocIpCidr');
 require('./ipcidr.test.js')(test, assert, assertEq);
 
 loadScript('tools/net-policy/js/ip.js');
 console.log('\nNetPolicyIp');
 require('./net-policy-ip.test.js')(test, assert, assertEq);
+
+loadScript('tools/cidr-vs/js/process.js');
+console.log('\nCidrVsProcess');
+require('./cidr-vs.test.js')(test, assert, assertEq);
+
+loadScript('tools/net-summary/js/process.js');
+console.log('\nNetSummaryProcess');
+require('./net-summary.test.js')(test, assert, assertEq);
+
+loadScript('tools/subnet-calc/js/ip.js');
+loadScript('tools/subnet-calc/js/calc.js');
+console.log('\nSubnetCalc');
+require('./subnet-calc.test.js')(test, assert, assertEq);
+
+loadScript('tools/iptables-gen/js/template.js');
+loadScript('tools/iptables-gen/js/parse.js');
+console.log('\nIptablesParse');
+require('./iptables-parse.test.js')(test, assert, assertEq);
+
+loadScript('tools/text-join/js/process.js');
+console.log('\nTextJoinProcess');
+require('./text-join.test.js')(test, assert, assertEq);
 
 loadScript('tools/excel2json/js/validate.js');
 console.log('\nExcel2JsonValidate');

@@ -64,6 +64,13 @@ var Excel2JsonValidate = (function () {
       }
       ips.push(norm);
     }
+    /* 去重（规范化后可能重复） */
+    var seen = {};
+    ips = ips.filter(function (v) {
+      if (seen[v]) return false;
+      seen[v] = true;
+      return true;
+    });
     return { ips: ips, error: null };
   }
 

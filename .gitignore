@@ -10,3 +10,6 @@ node_modules/
 
 # 独立 Go 构建仓库（本地联调 checkout，勿提交）
 webtools-goBuild/
+
+# 本地知识库分享稿（不纳入版本库）
+share-工具箱知识库.md

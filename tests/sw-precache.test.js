@@ -20,5 +20,8 @@ module.exports = function (test, assert, assertEq, ROOT) {
     assert(sw.indexOf('isApiRequest') !== -1, '缺少 isApiRequest');
     assert(sw.indexOf("cache: 'reload'") !== -1, 'precache 未使用 cache: reload');
     assert(sw.indexOf('isSwScript') !== -1, '缺少 sw.js 网络优先逻辑');
+    var nav = sw.match(/mode === 'navigate'[\s\S]*?return;\s*\n\s*\}/);
+    assert(nav, '缺少 navigate 分支');
+    assert(nav[0].indexOf('cache.put') === -1, '导航分支仍含 cache.put');
   });
 };

@@ -4,14 +4,14 @@
  * 生命周期：
  *   install  → precacheAll 逐项 fetch（cache: reload）写入 PRECACHE_URLS
  *   activate → 删除旧版本 CACHE_NAME 以外的缓存
- *   fetch    → /api/* 仅网络；导航网络优先；sw.js 网络优先；其余静态缓存优先并后台更新
+ *   fetch    → /api/* 仅网络；导航网络优先（不写缓存）；sw.js 网络优先；其余静态缓存优先并后台更新
  *
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v32';
+var CACHE_VERSION = 'webtools-v33';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -185,15 +185,11 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  /* 页面导航：网络优先，离线时回退缓存 */
+  /* 页面导航：网络优先，离线回退预缓存（不缓存任意导航 URL，避免 Cache 膨胀） */
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).then(function (response) {
         if (response && response.ok) {
-          var copy = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(event.request, copy);
-          });
           return response;
         }
         return matchNavigateFallback(event.request).then(function (cached) {

@@ -1,6 +1,6 @@
-# 浏览器与 Go WebView 兼容性
+# 浏览器与本地运行环境兼容性
 
-本文说明工具箱的目标运行环境、Go WebView 嵌入注意点，以及发布前兼容性检查方式。
+本文说明工具箱的目标运行环境、[webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild) 本地 HTTP 服务注意点，以及发布前兼容性检查方式。
 
 ## 目标环境
 
@@ -8,15 +8,17 @@
 |------|------|------|------|
 | Chrome 86+ | Chromium | ✅ | ✅（`accent-color` 为系统默认色） |
 | Chrome 80–85 | Chromium | ✅ | ⚠️ Flex `gap` 无效，间距偏挤 |
-| Go WebView · Windows | WebView2（Chromium  evergreen） | ✅ | 同 Chrome 90+ |
-| Go WebView · macOS | WKWebView（系统 WebKit） | ✅ 建议 macOS 11+ | ⚠️ 旧系统无 Flex gap |
-| Go WebView · Linux | WebKitGTK 2.32+ | ✅ | ⚠️ 2.30 以下无 Flex gap / BigInt |
+| webtools-goBuild · Windows | WebView2（Chromium evergreen） | ✅ | 同 Chrome 90+ |
+| webtools-goBuild · macOS | WKWebView（系统 WebKit） | ✅ 建议 macOS 11+ | ⚠️ 旧系统无 Flex gap |
+| webtools-goBuild · Linux | WebKitGTK 2.32+ | ✅ | ⚠️ 2.30 以下无 Flex gap / BigInt |
 | `file://` 本地双击 | 各桌面浏览器 | ✅ | 同对应内核 |
 | Cloudflare Pages + PWA | 现代 Chromium | ✅ | ✅ |
 
-## Go WebView 调研摘要
+## webtools-goBuild 本地服务与 WebView
 
-Go 桌面壳（[webview/webview](https://github.com/webview/webview)、[webview_go](https://github.com/webview/webview_go)、[Wails](https://wails.io)、[webviewgo](https://github.com/tituscheng/webviewgo) 等）**不内嵌固定版本 Chromium**，而是调用系统 WebView：
+[webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild) 将静态站点嵌入 Go 二进制，通过本地 HTTP 提供页面（默认 `http://127.0.0.1:8080`），行为与 Cloudflare Pages 的 HTTP 环境一致，可注册 PWA。
+
+若将页面嵌入第三方 Go WebView 壳（[Wails](https://wails.io)、[webview](https://github.com/webview/webview) 等），引擎仍依赖系统 WebView：
 
 | 平台 | 引擎 | 版本特点 |
 |------|------|----------|

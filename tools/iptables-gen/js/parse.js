@@ -8,8 +8,9 @@
  * 自动识别：
  *   - 命令名 → v4 / v6
  *   - 命中默认前缀 / 结尾策略 → 跳过（模板已生成，避免重复）
- *   - 命中白名单（按 comment 优先，其次结构）→ 抽取 IP 归入 dns/internal/snmp/mgmt
- *   - 其余 ACCEPT/DROP 等 → 自定义附加规则
+ *   - 命中白名单（**仅** comment 或 DNS/SNMP/mgmt 等明确结构）→ 抽取 -s IP
+ *   - 含 iprange/set 等复杂源匹配 → 保留为附加规则并告警
+ *   - 其余 ACCEPT/DROP 等 → 自定义附加规则（**不再**将泛化 ACCEPT -s 归入 internal）
  *
  * 导出：IptablesParse（依赖 IptablesTemplate）
  */
@@ -61,11 +62,21 @@ var IptablesParse = (function () {
     return m ? m[2] : null;
   }
 
-  /** 结构化推断白名单类型（仅 INPUT 链） */
+  /** 是否使用 iprange/set 等非简单 -s 源选择（无法映射为白名单 IP 列表） */
+  function hasComplexSourceMatcher(frag) {
+    if (/--src-range\b/.test(frag)) return true;
+    if (/-m\s+(iprange|set|addrtype|physdev|mac|recent|ipset)\b/.test(frag)) return true;
+    return false;
+  }
+
   function isInputRule(frag) {
     return /(?:^|\s)-A\s+INPUT(?:\s|$)/.test(frag);
   }
 
+  /**
+   * 结构化推断白名单类型（仅 INPUT + ACCEPT，且特征明确）
+   * 不含「任意 -s 且无 -p」的 internal 兜底，避免误吞自定义规则。
+   */
   function structuralBucket(frag) {
     if (!isInputRule(frag)) return null;
     if (!/-j\s+ACCEPT/.test(frag)) return null;
@@ -74,8 +85,6 @@ var IptablesParse = (function () {
     if (/--dport[s]?\s+(\S*\b)?53\b/.test(frag) && (hasUdp || hasTcp)) return 'dns';
     if (/--dport[s]?\s+\S*161\b/.test(frag) && hasUdp) return 'snmp';
     if (/multiport/.test(frag) && /22/.test(frag) && /443/.test(frag)) return 'mgmt';
-    var src = getSrc(frag);
-    if (src && !/-p\s/.test(frag) && !/--dport/.test(frag)) return 'internal';
     return null;
   }
 
@@ -96,27 +105,30 @@ var IptablesParse = (function () {
     for (var i = 0; i < lines.length; i++) {
       var raw = lines[i].trim();
       if (!raw || raw.charAt(0) === '#') { continue; }
-      // 跳过 iptables-save 控制行
       if (/^[*:]/.test(raw) || /^COMMIT$/i.test(raw)) { stats.skipped++; continue; }
 
       stats.total++;
 
-      // 确定 stack
       var stack = defaultStack;
       if (/^ip6tables\b/.test(raw)) stack = 'v6';
       else if (/^iptables\b/.test(raw)) stack = 'v4';
 
       var frag = normFrag(raw);
 
-      // 命中默认前缀 / 结尾
       if (known[frag]) { stats.known++; continue; }
 
-      // 仅处理 INPUT 相关追加规则；其余直接进 extra
       var bucket = null;
       var comment = getComment(frag);
       if (comment && COMMENT_BUCKET[comment]) bucket = COMMENT_BUCKET[comment];
       if (!bucket) bucket = structuralBucket(frag);
       if (bucket && !isInputRule(frag)) bucket = null;
+
+      if (bucket && hasComplexSourceMatcher(frag)) {
+        warnings.push('第 ' + (i + 1) + ' 行：白名单类规则含复杂源匹配，已保留为附加规则');
+        byStack[stack].extraRules.push(frag);
+        stats.extra++;
+        continue;
+      }
 
       if (bucket) {
         var src = getSrc(frag);
@@ -124,11 +136,15 @@ var IptablesParse = (function () {
         st.whitelistTouched[bucket] = true;
         if (src) {
           pushUnique(st.whitelists[bucket], src);
+        } else if (!comment || !COMMENT_BUCKET[comment]) {
+          /* 无 -s 且非 comment 明确白名单：不启用该类（避免生成对全源开放） */
+          delete st.whitelistTouched[bucket];
+          byStack[stack].extraRules.push(frag);
+          stats.extra++;
+          continue;
         }
-        // 无 src 表示对所有源开放，留空即可（whitelistTouched 标记已启用）
         stats.whitelist++;
       } else {
-        // 自定义附加规则：保留为不含命令名的片段
         byStack[stack].extraRules.push(frag);
         stats.extra++;
       }

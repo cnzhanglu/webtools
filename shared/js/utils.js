@@ -19,6 +19,11 @@ var BocUtils = (function () {
       .replace(/>/g, '&gt;');
   }
 
+  /** HTML 属性值转义（用于 innerHTML 中的 title、data-* 等双引号属性） */
+  function escAttr(s) {
+    return escHtml(s).replace(/"/g, '&quot;');
+  }
+
   /** 从下拉 + 自定义输入框读取连接符 */
   function getSep(presetId, customId) {
     var preset = document.getElementById(presetId).value;
@@ -84,6 +89,7 @@ var BocUtils = (function () {
 
   return {
     escHtml: escHtml,
+    escAttr: escAttr,
     getSep: getSep,
     bindSepToggle: bindSepToggle,
     copyText: copyText,
