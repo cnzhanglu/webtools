@@ -1,6 +1,7 @@
 /**
  * Excel 切换 JSON — 域名与 IP 校验层
  * 移植自 Python validators/domain_validator.py、ip_validator.py
+ * IP 解析与规范化委托 BocIpCidr。
  */
 var Excel2JsonValidate = (function () {
   'use strict';
@@ -10,59 +11,22 @@ var Excel2JsonValidate = (function () {
   /* 非法字符（换行、空格、逗号、中文标点等） */
   var DOMAIN_ILLEGAL = /[\s,，、；;。""''《》【】\u4e00-\u9fa5]/;
 
-  /* IPv4 段：0-255 */
-  function validOctet(s) {
-    if (s === '' || s.length > 3) return false;
-    var n = Number(s);
-    return Number.isInteger(n) && n >= 0 && n <= 255 && String(n) === s;
+  function isIPv4(s) {
+    return BocIpCidr.parseIPv4(s) !== null;
   }
 
-  function isIPv4(s) {
-    var parts = s.split('.');
-    if (parts.length !== 4) return false;
-    return parts.every(validOctet);
+  function isIPv6(s) {
+    return BocIpCidr.parseIPv6(s) !== null;
   }
 
   /**
-   * RFC 4291 IPv6 地址校验（支持 :: 缩写，不支持 zone ID）
+   * 将合法 IP 规范化为 BocIpCidr 标准文本（用于 E/F 列差分比较）
+   * @returns string|null
    */
-  function isIPv6(s) {
-    if (s.indexOf(':') === -1) return false;
-    /* 最多一个 :: */
-    if ((s.match(/::/g) || []).length > 1) return false;
-
-    var halves = s.split('::');
-    if (halves.length > 2) return false;
-
-    function validGroups(part) {
-      if (!part) return [];
-      return part.split(':');
-    }
-
-    var left  = validGroups(halves[0]);
-    var right = halves.length === 2 ? validGroups(halves[1]) : [];
-
-    /* 右半段最后一组可能是 IPv4 映射（如 ::ffff:192.168.1.1） */
-    var ipv4Tail = false;
-    if (right.length && isIPv4(right[right.length - 1])) {
-      right = right.slice(0, -1).concat(['0', '0']); /* IPv4 占 2 个 16-bit 组 */
-      ipv4Tail = true;
-    }
-
-    var groups = left.concat(right);
-    var totalGroups = groups.length;
-
-    if (halves.length === 1) {
-      /* 无 :: 必须恰好 8 组 */
-      if (totalGroups !== 8) return false;
-    } else {
-      /* 有 :: 两侧加起来不超过 8 组 */
-      if (totalGroups > 8) return false;  /* :: 至少代表 1 组 */
-    }
-
-    /* 每组 1-4 位十六进制 */
-    var HEX = /^[0-9a-fA-F]{1,4}$/;
-    return groups.every(function (g) { return HEX.test(g); });
+  function normalizeIp(ip) {
+    var p = BocIpCidr.parseSingleIp(String(ip || '').trim());
+    if (!p) return null;
+    return BocIpCidr.ipFromBigInt(p.value, p.family);
   }
 
   /**
@@ -94,7 +58,11 @@ var Excel2JsonValidate = (function () {
       if (!isIPv4(ip) && !isIPv6(ip)) {
         return { ips: [], error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] IP 地址格式非法：' + ip };
       }
-      ips.push(ip);
+      var norm = normalizeIp(ip);
+      if (!norm) {
+        return { ips: [], error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] IP 地址格式非法：' + ip };
+      }
+      ips.push(norm);
     }
     return { ips: ips, error: null };
   }
@@ -114,12 +82,19 @@ var Excel2JsonValidate = (function () {
     if (!isIPv4(ip) && !isIPv6(ip)) {
       return { ip: '', error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] IP 地址格式非法：' + ip };
     }
-    return { ip: ip, error: null };
+    var norm = normalizeIp(ip);
+    if (!norm) {
+      return { ip: '', error: '[行 ' + rowIndex + ' 列 ' + colLetter + '] IP 地址格式非法：' + ip };
+    }
+    return { ip: norm, error: null };
   }
 
   return {
     checkDomain: checkDomain,
     validateMultipleIPs: validateMultipleIPs,
-    validateSingleIP: validateSingleIP
+    validateSingleIP: validateSingleIP,
+    normalizeIp: normalizeIp,
+    isIPv4: isIPv4,
+    isIPv6: isIPv6
   };
 }());

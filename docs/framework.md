@@ -74,6 +74,28 @@ git checkout dev
 
 禁止在 main 上直接开发，禁止创建额外长期功能分支（统一使用 dev）。
 
+## 单元测试与 CI
+
+### 必须遵守
+
+1. **所有工具与共享模块的核心逻辑须有单元测试**（放在 `tests/` 目录，Node.js 运行，无外部依赖）。
+2. 新增工具或修改 `process.js` / `shared/js/` 算法时，**同步补充或更新**对应测试用例。
+3. 在 `shared/js/tools-registry.js` 注册新工具后，须在 `sw.js` 的 `PRECACHE_URLS` 追加资源并递增 `CACHE_VERSION`。
+
+### 本地执行
+
+```bash
+node tests/run-tests.js
+python3 scripts/check-precache-registry.py
+python3 scripts/check-compat.py --baseline chrome86,go-webview-linux
+```
+
+### CI
+
+推送到 `dev` / `main` 或 PR 时，GitHub Actions（`compat-check.yml`）自动运行上述三项检查。
+
+Go 本地服务构建已迁移至独立仓库 [webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild)，本仓库 CI 不包含 Go build。
+
 ## 浏览器 / WebView 兼容性
 
 见 [browser-compat.md](browser-compat.md)。发布前执行：

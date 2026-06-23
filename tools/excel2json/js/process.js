@@ -41,14 +41,21 @@ var Excel2JsonProcess = (function () {
     for (var ri = 0; ri < dataRows.length; ri++) {
       var row  = dataRows[ri];
       var app  = (row.A || '').trim();
-      if (!app) continue;
+      if (!app) {
+        return { ok: false, error: '[行 ' + row.rowIndex + ' 列 A] 应用名为空，请填写或删除该行' };
+      }
 
       var fqdn = (row.D || '').trim();
       var rawE = row.E || '';
       var rawF = row.F || '';
       var type = (row.G || '').trim();
 
-      if (type !== '动态' && type !== '静态') continue;
+      if (type !== '动态' && type !== '静态') {
+        return {
+          ok: false,
+          error: '[行 ' + row.rowIndex + ' 列 G] 类型须为「动态」或「静态」，当前为：' + (type || '（空）')
+        };
+      }
 
       /* 域名校验 */
       var domErr = Excel2JsonValidate.checkDomain(fqdn, row.rowIndex);
@@ -144,7 +151,10 @@ var Excel2JsonProcess = (function () {
       stats: {
         appCount: appOrder.length,
         fileCount: fileCount,
-        rowCount: dataRows.length
+        rowCount: dataRows.length,
+        processedRows: appOrder.reduce(function (n, name) {
+          return n + groups[name].dynamic.length + groups[name].static.length;
+        }, 0)
       }
     };
   }

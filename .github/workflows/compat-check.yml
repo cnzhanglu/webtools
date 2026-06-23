@@ -12,5 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Run unit tests
+        run: node tests/run-tests.js
+
+      - name: Check SW precache vs tools registry
+        run: python3 scripts/check-precache-registry.py
+
       - name: Run static compat checker
         run: python3 scripts/check-compat.py --baseline chrome86,go-webview-linux

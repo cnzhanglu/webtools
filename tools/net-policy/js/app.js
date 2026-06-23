@@ -14,6 +14,13 @@ var NetPolicyApp = (function () {
   function init() {
     BocUtils.bindSepToggle('sep-preset', 'sep-custom-group');
     BocUtils.bindSepToggle('port-sep-preset', 'port-sep-custom-group');
+    var modeEl = document.getElementById('output-mode');
+    var hintEl = document.getElementById('one-line-hint');
+    function syncOneLineHint() {
+      if (hintEl) hintEl.style.display = modeEl.value === 'one-line' ? '' : 'none';
+    }
+    modeEl.addEventListener('change', syncOneLineHint);
+    syncOneLineHint();
   }
 
   function doProcess() {

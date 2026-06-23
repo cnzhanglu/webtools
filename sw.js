@@ -2,16 +2,16 @@
  * 工具箱 Service Worker — 离线缓存（仅 HTTPS / HTTP 环境生效，file:// 不注册）
  *
  * 生命周期：
- *   install  → precacheAll 逐项 fetch 写入 PRECACHE_URLS（单条失败不影响整体）
+ *   install  → precacheAll 逐项 fetch（cache: reload）写入 PRECACHE_URLS
  *   activate → 删除旧版本 CACHE_NAME 以外的缓存
- *   fetch    → 导航请求网络优先；静态资源缓存优先并后台更新
+ *   fetch    → /api/* 仅网络；导航网络优先；sw.js 网络优先；其余静态缓存优先并后台更新
  *
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v31';
+var CACHE_VERSION = 'webtools-v32';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -89,10 +89,22 @@ var PRECACHE_URLS = [
   './tools/text-join/js/app.js',
 ];
 
-/** 逐项预缓存：避免 cache.addAll 因单条 307/404 导致整批失败 */
+/** 是否为 API 请求（不走缓存，避免陈旧 health 等） */
+function isApiRequest(url) {
+  var path = new URL(url).pathname;
+  return path === '/api' || path.indexOf('/api/') === 0;
+}
+
+/** 是否为 Service Worker 脚本自身 */
+function isSwScript(url) {
+  var path = new URL(url).pathname;
+  return path === '/sw.js' || path.endsWith('/sw.js');
+}
+
+/** 逐项预缓存：强制网络拉取，避免旧 SW 缓存污染新版本 */
 function precacheAll(cache, urls) {
   return Promise.all(urls.map(function (url) {
-    return fetch(url).then(function (response) {
+    return fetch(url, { cache: 'reload' }).then(function (response) {
       if (response && response.ok) {
         return cache.put(url, response);
       }
@@ -154,6 +166,24 @@ self.addEventListener('activate', function (event) {
 
 self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
+
+  var reqUrl = event.request.url;
+
+  /* API：仅走网络，不读写 Cache Storage */
+  if (isApiRequest(reqUrl)) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  /* sw.js：网络优先，确保及时更新 */
+  if (isSwScript(reqUrl)) {
+    event.respondWith(
+      fetch(event.request, { cache: 'reload' }).catch(function () {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
 
   /* 页面导航：网络优先，离线时回退缓存 */
   if (event.request.mode === 'navigate') {

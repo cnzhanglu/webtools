@@ -86,6 +86,9 @@
         <option value="by-port">按端口分组</option>
         <option value="one-line">全部压缩为一行</option>
       </select>
+      <p class="setting-hint" id="one-line-hint" style="display:none;margin:4px 0 0;font-size:.75rem;color:#888;line-height:1.5;max-width:280px">
+        「全部压缩为一行」会将<strong>所有地址</strong>与<strong>所有端口</strong>各自去重后合并输出，不再保留每行输入的地址↔端口对应关系；若需保持行级配对请选「按端口分组」。
+      </p>
     </div>
 
     <div class="setting-group" style="margin-left:auto">
@@ -149,6 +152,7 @@
 
 <script src="../../shared/js/utils.js"></script>
 <script src="../../shared/js/xlsx.js"></script>
+<script src="../../shared/js/ipcidr.js"></script>
 <script src="js/ip.js"></script>
 <script src="js/process.js"></script>
 <script src="js/app.js"></script>

@@ -218,6 +218,16 @@ git checkout dev
 - 禁止在 main 上直接开发（除紧急 hotfix，且事后须同步回 dev）
 - 禁止创建额外长期功能分支（统一使用 dev）
 
+禁止在 main 上直接开发，禁止创建额外长期功能分支（统一使用 dev）。
+
+## 单元测试与 CI
+
+- **所有工具与共享模块的核心逻辑须有单元测试**（`tests/`，`node tests/run-tests.js`）
+- 新增/修改 `process.js` 或 `shared/js/` 算法时同步更新测试
+- 注册新工具后更新 `sw.js` PRECACHE_URLS 并递增 CACHE_VERSION
+- 发布前执行：`node tests/run-tests.js`、`python3 scripts/check-precache-registry.py`、`python3 scripts/check-compat.py`
+- Go 构建已迁至 [webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild)，本仓库 CI 不跑 go build
+
 ## 部署
 
 ```bash

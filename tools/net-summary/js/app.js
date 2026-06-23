@@ -107,7 +107,7 @@ var NetSummaryApp = (function () {
       strict: '严格模式（仅合并等长连续网段）',
       loose: '宽松模式（允许不等长合并，精确覆盖）',
       compress: '压缩模式（每个连续区间输出单条最长覆盖 CIDR' + compressSuffix + '）'
-    }[mode] || mode;
+    }[mode] || BocUtils.escHtml(mode);
     var superset;
     if (mode === 'compress') {
       superset = stats.supersetExact
