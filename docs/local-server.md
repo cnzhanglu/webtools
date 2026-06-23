@@ -2,6 +2,8 @@
 
 工具箱除 `file://` 双击、Cloudflare Pages 在线访问外，提供 **Go 单二进制** 本地分发方式：下载即可运行，无需安装 Python 或 Node。
 
+> Go 构建与发布已独立至仓库 **[webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild)**。本仓库（webtools）仅维护静态前端。
+
 ## 适用场景
 
 - 内网/离线环境快速部署工具箱
@@ -12,7 +14,7 @@
 
 ### 方式一：GitHub Release（推荐）
 
-1. 打开 [Releases](https://github.com/cnzhanglu/webtools/releases)，下载对应平台文件，例如：
+1. 打开 [webtools-goBuild Releases](https://github.com/cnzhanglu/webtools-goBuild/releases)，下载对应平台文件，例如：
    - `webtools-1.0.0-linux-amd64`
    - `webtools-1.0.0-windows-amd64.exe`
    - `webtools-1.0.0-darwin-arm64`
@@ -21,7 +23,15 @@
 
 ### 方式二：自行编译
 
-见 [`server/README.md`](../server/README.md)。
+见 [webtools-goBuild README](https://github.com/cnzhanglu/webtools-goBuild/blob/main/README.md)。
+
+本地联调示例（两个仓库相邻 checkout）：
+
+```bash
+cd webtools-goBuild
+WEBTOOLS_SRC=../webtools bash scripts/build.sh webtools
+./webtools
+```
 
 ## CLI 参数
 
@@ -64,37 +74,19 @@ webtools [flags]
 | Go 本地服务 | 可注册 | 与线上一致的 HTTP 环境 |
 | Cloudflare Pages | 可注册 | 生产部署 |
 
-静态资源在**编译时嵌入**二进制；更新工具页面需重新构建并发布新版本二进制。
+静态资源在**编译时嵌入**二进制；更新工具页面需重新构建并发布新版本二进制（见 webtools-goBuild 仓库）。
 
 ## 架构预留：后台服务
 
-```
-启动 → BackgroundService.StartAll()
-     → HTTP（/api + 静态文件）
-退出 → HTTP Shutdown → BackgroundService.StopAll()
-```
-
-扩展步骤：
-
-1. 在 `server/internal/service/` 实现 `BackgroundService`（`Name`、`Start`、`Stop`）
-2. 在 `cmd/webtools/main.go` 注册到 `Registry`
-3. 在 `internal/api/` 增加路由，供前端或外部调用
-
-示例场景（未实现，仅说明方向）：
-
-- 配置文件热重载
-- 定时同步内网数据源
-- 批量任务 API（若未来需要服务端计算）
-
-当前版本仅注册 `noop` 占位服务，保证生命周期钩子可用。
+Go 服务端扩展说明见 [webtools-goBuild](https://github.com/cnzhanglu/webtools-goBuild) 仓库的 `internal/service/` 与 `internal/api/`。
 
 ## 发布流程（维护者）
 
-1. 合并包含 `server/` 的变更到 `main`
-2. 打 tag：`git tag server-v0.1.0 && git push origin server-v0.1.0`
-3. GitHub Actions 构建六平台产物并创建 Release
+1. 合并 webtools 前端变更到 `main`
+2. 在 **webtools-goBuild** 仓库打 tag：`git tag v0.1.0 && git push origin v0.1.0`
+3. GitHub Actions 从 webtools `main`（或指定 ref）同步静态资源，构建六平台产物并创建 Release
 
-也可在 Actions 页面手动运行 **Release Server** workflow 试构建。
+也可在 webtools-goBuild 的 Actions 页面手动运行 **Release** workflow 试构建。
 
 ## 依赖说明
 
