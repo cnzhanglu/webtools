@@ -98,7 +98,7 @@
 从 [webtools-goBuild Releases](https://github.com/cnzhanglu/webtools-goBuild/releases) 下载对应平台的 `webtools` 可执行文件，运行后访问 `http://127.0.0.1:8080`。
 
 ```bash
-./webtools              # 默认 127.0.0.1:8080
+./webtools              # 默认 127.0.0.1:8080（端口占用时自动递增）
 ./webtools --open       # 启动并打开浏览器
 ./webtools --host 0.0.0.0 --port 9000   # 局域网可访问
 ```
