@@ -57,6 +57,10 @@ loadScript('tools/cidr-vs/js/process.js');
 console.log('\nCidrVsProcess');
 require('./cidr-vs.test.js')(test, assert, assertEq);
 
+loadScript('tools/cidr-vs/js/excel-lookup.js');
+console.log('\nCidrExcelLookup');
+require('./cidr-excel-lookup.test.js')(test, assert, assertEq);
+
 loadScript('tools/net-summary/js/process.js');
 console.log('\nNetSummaryProcess');
 require('./net-summary.test.js')(test, assert, assertEq);

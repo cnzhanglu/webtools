@@ -204,7 +204,49 @@ var BocXlsxRead = (function () {
     return m ? { col: colLetterIdx(m[1]), row: parseInt(m[2], 10) } : null;
   }
 
-  function parseSheet(doc, ss) {
+  /**
+   * 解析工作簿清单，返回 [{name, rId, path}]。
+   * 依赖 xl/workbook.xml 与 xl/_rels/workbook.xml.rels。
+   */
+  function parseWorkbook(files) {
+    var wbData = files['xl/workbook.xml'];
+    if (!wbData) return [];
+    var doc = xmlDoc(wbData);
+    var sheets = [], sheetEls = tags(doc, 'sheet'), i;
+    for (i = 0; i < sheetEls.length; i++) {
+      sheets.push({
+        name: sheetEls[i].getAttribute('name') || '',
+        rId:  sheetEls[i].getAttribute('r:id') || sheetEls[i].getAttribute('id') || ''
+      });
+    }
+    /* 解析 rels 拿到真实路径 */
+    var relData = files['xl/_rels/workbook.xml.rels'];
+    if (relData) {
+      var relDoc = xmlDoc(relData);
+      var relEls = tags(relDoc, 'Relationship'), rmap = {}, j;
+      for (j = 0; j < relEls.length; j++) {
+        rmap[relEls[j].getAttribute('Id')] = relEls[j].getAttribute('Target') || '';
+      }
+      for (i = 0; i < sheets.length; i++) {
+        var target = rmap[sheets[i].rId] || '';
+        /* Target 可能是相对路径如 worksheets/sheet1.xml */
+        sheets[i].path = /^\//.test(target) ? target.slice(1) : 'xl/' + target;
+      }
+    }
+    return sheets;
+  }
+
+  /**
+   * 解析单张工作表，返回行数组。
+   * @param {Document} doc  工作表 XML
+   * @param {string[]} ss   共享字符串
+   * @param {Object}   opts 可选 { colIndices, startRow, endRow }
+   *   colIndices: 0-based 列索引数组；未指定时输出 A–H（兼容旧行为）
+   *   startRow / endRow: 1-based 行号过滤（含两端）
+   */
+  function parseSheet(doc, ss, opts) {
+    opts = opts || {};
+
     /* --- Merge cells --- */
     var merges = [], mi, mcs = tags(doc, 'mergeCell');
     for (mi = 0; mi < mcs.length; mi++) {
@@ -259,37 +301,113 @@ var BocXlsxRead = (function () {
       }
     }
 
-    /* --- Build output rows (columns A-H by default) --- */
-    var maxCol = 7; /* 0-based, so 0=A … 7=H */
-    var rowNums = Object.keys(rowDataMap).map(Number).sort(function (a, b) { return a - b; });
+    /* --- 确定要输出的列（0-based 索引集合） --- */
+    var colIndices = opts.colIndices;
+    if (!colIndices || !colIndices.length) {
+      /* 向后兼容：默认 A–H（0-7） */
+      colIndices = [0,1,2,3,4,5,6,7];
+    }
+
+    /* --- 行范围过滤 --- */
+    var startRow = opts.startRow || 1;
+    var endRow   = opts.endRow   || Infinity;
+
+    var rowNums = Object.keys(rowDataMap).map(Number)
+      .filter(function (rn) { return rn >= startRow && rn <= endRow; })
+      .sort(function (a, b) { return a - b; });
+
     return rowNums.map(function (rn) {
       var cd = rowDataMap[rn], row = { rowIndex: rn }, c;
-      for (c = 0; c <= maxCol; c++) {
+      for (var ci2 = 0; ci2 < colIndices.length; ci2++) {
+        c = colIndices[ci2];
         row[idxToColLetter(c)] = cd[c] !== undefined ? String(cd[c]) : '';
       }
       return row;
     });
   }
 
-  function parse(arrayBuffer) {
-    var buf   = new Uint8Array(arrayBuffer);
+  /**
+   * 解析 xlsx / 伪装成 .xls 的 xlsx 文件。
+   *
+   * @param {ArrayBuffer} arrayBuffer 文件内容
+   * @param {Object}      [options]   可选配置，不传时行为与旧版完全一致
+   *   sheetIndex {number}   工作表序号（0-based），默认 0
+   *   sheetName  {string}   按名称选表（优先于 sheetIndex）
+   *   columns    {string[]} 列字母数组，如 ['F','I']；不传时输出 A–H
+   *   startRow   {number}   起始行（1-based，含），默认 1
+   *   endRow     {number}   结束行（1-based，含），默认不限
+   * @returns {{ rows: Array, sheetName: string, error?: string }}
+   */
+  function parse(arrayBuffer, options) {
+    options = options || {};
+    var buf = new Uint8Array(arrayBuffer);
+
+    /* 魔数检测：BIFF .xls 以 D0 CF 11 E0 开头，不支持 */
+    if (buf[0] === 0xD0 && buf[1] === 0xCF) {
+      return { rows: [], error: '不支持旧版 BIFF .xls 格式，请在 Excel 中「另存为」.xlsx 后再上传' };
+    }
+
     var files = readZip(buf);
 
-    /* shared strings */
+    /* 共享字符串 */
     var ssData = files['xl/sharedStrings.xml'];
     var ss     = ssData ? parseSharedStrings(xmlDoc(ssData)) : [];
 
-    /* first sheet */
-    var sheetData = files['xl/worksheets/sheet1.xml'];
-    if (!sheetData) {
-      var keys = Object.keys(files), i;
-      for (i = 0; i < keys.length; i++) {
-        if (/xl\/worksheets\/sheet\d+\.xml/.test(keys[i])) { sheetData = files[keys[i]]; break; }
+    /* 解析工作表列表 */
+    var wbSheets = parseWorkbook(files);
+
+    /* 定位目标工作表数据 */
+    var sheetData = null;
+    var resolvedName = '';
+
+    if (options.sheetName) {
+      /* 按名称查找 */
+      for (var si = 0; si < wbSheets.length; si++) {
+        if (wbSheets[si].name === options.sheetName) {
+          sheetData = files[wbSheets[si].path];
+          resolvedName = wbSheets[si].name;
+          break;
+        }
       }
     }
-    if (!sheetData) return { rows: [] };
 
-    return { rows: parseSheet(xmlDoc(sheetData), ss) };
+    if (!sheetData) {
+      /* 按 sheetIndex（默认 0）查找 */
+      var idx = options.sheetIndex || 0;
+      if (wbSheets[idx] && wbSheets[idx].path) {
+        sheetData = files[wbSheets[idx].path];
+        resolvedName = wbSheets[idx].name;
+      }
+    }
+
+    /* 回退：直接找 sheet1.xml 或任意 worksheet（与旧版相同） */
+    if (!sheetData) {
+      sheetData = files['xl/worksheets/sheet1.xml'];
+      if (!sheetData) {
+        var keys = Object.keys(files), i;
+        for (i = 0; i < keys.length; i++) {
+          if (/xl\/worksheets\/sheet\d+\.xml/.test(keys[i])) { sheetData = files[keys[i]]; break; }
+        }
+      }
+    }
+
+    if (!sheetData) return { rows: [], sheetName: resolvedName };
+
+    /* 列字母 → 0-based 索引 */
+    var colIndices = null;
+    if (options.columns && options.columns.length) {
+      colIndices = options.columns.map(function (c) {
+        return colLetterIdx(c.trim().toUpperCase());
+      });
+    }
+
+    var sheetOpts = {
+      colIndices: colIndices,
+      startRow:   options.startRow || null,
+      endRow:     options.endRow   || null
+    };
+
+    return { rows: parseSheet(xmlDoc(sheetData), ss, sheetOpts), sheetName: resolvedName };
   }
 
   return { parse: parse };

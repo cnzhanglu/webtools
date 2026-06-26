@@ -24,7 +24,7 @@ var BocToolRegistry = {
     {
       id: 'cidr-vs',
       name: 'CIDR 网段对比',
-      description: '对比两份 IP/CIDR 清单（IPv4/IPv6），判断 B 清单网段是否被 A 清单覆盖，支持粘贴或文件加载、可视化结果与 xlsx 导出。',
+      description: '对比两份 IP/CIDR 清单（IPv4/IPv6），判断 B 清单网段是否被 A 清单覆盖；或上传多个 xlsx 申请单，将待查 IP/CIDR 反查到对应文件与 Excel 行号（支持 NASP ACL 等模板）。',
       tags: ['网络', 'IPv4', 'IPv6', 'CIDR'],
       path: 'tools/cidr-vs/index.html',
       status: 'ready',

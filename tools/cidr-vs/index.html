@@ -20,12 +20,19 @@
 <header class="site-header">
   <div>
     <h1>CIDR 网段对比工具</h1>
-    <p>对比两份 IP / CIDR 清单（IPv4 / IPv6），判断 B 清单网段是否被 A 清单覆盖</p>
+    <p>文本对比 / Excel 反查：将查询地址匹配到申请单行号</p>
   </div>
   <a class="header-back" href="../../index.html">← 返回工具箱</a>
 </header>
 
-<div class="page-main cidr-main">
+<!-- 模式切换 Tab -->
+<div class="mode-tabs">
+  <button class="mode-tab active" id="tab-text"  onclick="CidrVsApp.switchMode('text')">文本对比</button>
+  <button class="mode-tab"        id="tab-excel" onclick="CidrVsApp.switchMode('excel')">Excel 反查</button>
+</div>
+
+<!-- ===== 文本对比模式 ===== -->
+<div id="mode-text" class="page-main cidr-main">
 
   <div class="settings-bar">
     <div class="setting-group" style="flex:1">
@@ -69,6 +76,7 @@
     </div>
   </div>
 
+  <!-- 文本对比结果 -->
   <div class="panel result-panel">
     <div class="panel-header">
       <h2>对比结果</h2>
@@ -100,7 +108,150 @@
     </div>
   </div>
 
-</div>
+</div><!-- #mode-text -->
+
+<!-- ===== Excel 反查模式 ===== -->
+<div id="mode-excel" class="page-main excel-main" style="display:none">
+
+  <!-- 顶部操作栏 -->
+  <div class="settings-bar" style="grid-column:1/-1">
+    <div class="setting-group" style="flex:1">
+      <label>说明</label>
+      <div class="hint-text">
+        上传一或多个 xlsx / xls 申请单，配置 IP 数据起始位置，再粘贴待查 IP/CIDR，
+        工具将告诉你每条查询在哪个文件的哪一行被覆盖。
+      </div>
+    </div>
+    <div class="setting-group" style="margin-left:auto">
+      <label>&nbsp;</label>
+      <button class="btn btn-primary" onclick="CidrVsApp.doExcelLookup()">▶ 开始反查</button>
+    </div>
+  </div>
+
+  <!-- 左列：文件上传 + 范围配置 -->
+  <div class="panel excel-left">
+    <div class="panel-header">
+      <h2>Excel 文件</h2>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="CidrVsApp.triggerExcelLoad()">添加文件</button>
+        <button class="btn btn-outline" onclick="CidrVsApp.applyPresetNasp()">NASP ACL 预设</button>
+        <button class="btn btn-danger"  onclick="CidrVsApp.clearExcelFiles()">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <input type="file" id="file-excel" accept=".xls,.xlsx" multiple hidden>
+      <div id="file-list" class="file-list">
+        <div class="file-list-empty">尚未选择文件，点击「添加文件」上传</div>
+      </div>
+    </div>
+
+    <!-- 范围配置 -->
+    <div class="range-config">
+      <div class="range-title">数据范围配置</div>
+      <div class="range-grid">
+        <div class="range-item">
+          <label>起始单元格</label>
+          <input type="text" id="cfg-start-cell" value="I7" placeholder="如 I7" maxlength="10">
+          <span class="range-hint">列字母 + 行号</span>
+        </div>
+        <div class="range-item">
+          <label>数据列（逗号分隔）</label>
+          <input type="text" id="cfg-columns" value="I" placeholder="如 I 或 F,I" maxlength="30">
+          <span class="range-hint">留空则只取起始列</span>
+        </div>
+        <div class="range-item">
+          <label>结束行</label>
+          <input type="number" id="cfg-end-row" value="" placeholder="留空自动" min="1" max="99999">
+          <span class="range-hint">留空扫描全表</span>
+        </div>
+        <div class="range-item">
+          <label>工作表序号（0起）</label>
+          <input type="number" id="cfg-sheet-index" value="0" min="0" max="99">
+          <span class="range-hint">或填 工作表名称：</span>
+        </div>
+        <div class="range-item range-item-wide">
+          <label>工作表名称（覆盖序号）</label>
+          <input type="text" id="cfg-sheet-name" value="" placeholder="留空用序号" maxlength="64">
+        </div>
+        <div class="range-item range-item-wide">
+          <label>附加显示列（命中时一并展示，逗号分隔）</label>
+          <input type="text" id="cfg-context-cols" value="" placeholder="如 E,F（NASP 预设自动填写）" maxlength="50">
+          <span class="range-hint">这些列的值会追加到结果表末尾，不参与 IP 匹配</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右列：查询地址 -->
+  <div class="panel excel-right">
+    <div class="panel-header">
+      <h2>查询地址</h2>
+      <div class="btn-row">
+        <button class="btn btn-danger" onclick="CidrVsApp.clearExcelQuery()">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <textarea id="input-query"
+        placeholder="每行一条 IP 或 CIDR，支持 IPv4 / IPv6&#10;例如：&#10;103.238.96.5&#10;10.0.1.0/24"></textarea>
+    </div>
+  </div>
+
+  <!-- Excel 反查结果 -->
+  <div class="panel result-panel excel-result-panel">
+    <div class="panel-header">
+      <h2>反查结果</h2>
+      <div class="btn-row">
+        <span class="stat-badge" id="stat-badge-excel">—</span>
+        <button class="btn btn-outline" onclick="CidrVsApp.copyExcelResult()">复制结果</button>
+        <button class="btn btn-success" onclick="CidrVsApp.exportExcelXlsx()">导出 xlsx</button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="error-box" id="error-box-excel" style="margin:14px 14px 0"></div>
+
+      <!-- 过滤条：反查完成后显示，支持多条件叠加 -->
+      <div id="excel-filter-bar" class="filter-bar" style="display:none">
+        <span class="filter-label">过滤</span>
+        <span class="filter-group">
+          <span class="filter-group-label">协议</span>
+          <button class="filter-btn active" data-key="family" data-val="" onclick="CidrVsApp.setFilter('family','')">全部</button>
+          <button class="filter-btn" data-key="family" data-val="IPv4"  onclick="CidrVsApp.setFilter('family','IPv4')">IPv4</button>
+          <button class="filter-btn" data-key="family" data-val="IPv6"  onclick="CidrVsApp.setFilter('family','IPv6')">IPv6</button>
+        </span>
+        <span class="filter-group">
+          <span class="filter-group-label">命中状态</span>
+          <button class="filter-btn active" data-key="matched" data-val=""      onclick="CidrVsApp.setFilter('matched','')">全部</button>
+          <button class="filter-btn" data-key="matched" data-val="true"  onclick="CidrVsApp.setFilter('matched','true')">命中</button>
+          <button class="filter-btn" data-key="matched" data-val="false" onclick="CidrVsApp.setFilter('matched','false')">未命中</button>
+        </span>
+        <span class="filter-count" id="filter-count"></span>
+      </div>
+
+      <div class="result-scroll excel-result-scroll">
+          <table>
+          <thead id="excel-thead">
+            <tr>
+              <th>行号</th>
+              <th>查询原始</th>
+              <th>规范化</th>
+              <th>协议</th>
+              <th>命中状态</th>
+              <th>文件</th>
+              <th>Excel 行</th>
+              <th>列</th>
+              <th>命中网段</th>
+              <th>单元格摘要</th>
+            </tr>
+          </thead>
+          <tbody id="result-body-excel">
+            <tr><td colspan="10"><span class="empty-hint">配置范围并点击「开始反查」</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #mode-excel -->
 
 <footer class="site-footer">
   工具箱 · 纯静态前端 · 数据不出浏览器<br>
@@ -109,8 +260,10 @@
 
 <script src="../../shared/js/utils.js"></script>
 <script src="../../shared/js/xlsx.js"></script>
+<script src="../../shared/js/xlsx-read.js"></script>
 <script src="../../shared/js/ipcidr.js"></script>
 <script src="js/process.js"></script>
+<script src="js/excel-lookup.js"></script>
 <script src="js/app.js"></script>
 <script src="../../shared/js/pwa.js"></script>
 </body>
