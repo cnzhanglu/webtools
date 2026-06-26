@@ -27,7 +27,7 @@
 webtools [flags]
 
   --host string   监听地址（默认 127.0.0.1）
-  --port int      端口（默认 8080）
+  --port int      端口（默认 8080；被占用时自动尝试后续端口）
   --open          启动后打开系统默认浏览器
   --version       打印版本并退出
 ```
