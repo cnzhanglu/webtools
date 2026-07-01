@@ -431,6 +431,62 @@
   justify-content: flex-end;
 }
 
+/* 命令结果弹窗 — 宽版（覆盖 .modal-box 的 max-width） */
+.modal-box-wide {
+  max-width: 920px;
+  width: 95vw;
+}
+
+/* 创建命令弹窗 — 固定红色加粗免责声明 */
+.cmds-disclaimer {
+  color: #c62828;
+  font-weight: 700;
+  font-size: .88rem;
+  line-height: 1.65;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #ffebee;
+  border: 1px solid #ef9a9a;
+  border-radius: 6px;
+}
+
+/* 警告条（动态算法/缺字段等） */
+.cmds-warning-bar {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-bottom: 10px;
+  font-size: .82rem;
+  color: #7a5c00;
+  white-space: pre-wrap;
+}
+
+/* 命令元信息（域名数量等） */
+.cmds-meta {
+  font-size: .82rem;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+/* 命令文本区 */
+.cmds-pre {
+  background: #f4f6fa;
+  border: 1px solid #dbe3f1;
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-family: 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
+  font-size: .82rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+  max-height: 55vh;
+  overflow-y: auto;
+  color: #1a1a2e;
+  user-select: text;
+}
+
 #file-input {
   display: none;
 }

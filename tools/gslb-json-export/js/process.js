@@ -823,6 +823,8 @@ var GslbProcess = (function () {
     isScalar: isScalar,
     normalizeHmsList: normalizeHmsList,
     buildDcMemberIndex: buildDcMemberIndex,
+    getAddList: getAddList,
+    buildGpoolMap: buildGpoolMap,
     collectAvailableFields: collectAvailableFields,
     buildAddRows: buildAddRows,
     buildOrphanGpoolRows: buildOrphanGpoolRows,

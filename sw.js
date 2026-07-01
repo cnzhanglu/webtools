@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v34';
+var CACHE_VERSION = 'webtools-v36';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -39,6 +39,7 @@ var PRECACHE_URLS = [
   './tools/gslb-json-export/css/tool.css',
   './tools/gslb-json-export/js/fields.js',
   './tools/gslb-json-export/js/process.js',
+  './tools/gslb-json-export/js/commands.js',
   './tools/gslb-json-export/js/graph.js',
   './tools/gslb-json-export/js/transfer.js',
   './tools/gslb-json-export/js/app.js',
