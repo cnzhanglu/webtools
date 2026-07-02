@@ -8,6 +8,8 @@
  *     → 逐行输出转换结果
  *
  * 占位符规则：$n 或 ${n} 对应第 n 个字段（1-based），越界保留原占位符。
+ * 转义规则：\$
+ *   可输出字面量 $，例如 \${1} 会保留为 ${1}，\$1 会保留为 $1。
  *
  * 导出：TextJoinProcess
  */
@@ -17,6 +19,7 @@ var TextJoinProcess = (function () {
   // 同时支持两种占位符：$1 与 ${1}。
   // 使用“二选一捕获组”提取数字索引，兼容历史模板并允许新模板避开普通 $ 文本冲突。
   var PLACEHOLDER_RE = /\$(?:\{(\d+)\}|(\d+))/g;
+  var ESCAPED_DOLLAR_TOKEN = '__TEXT_JOIN_ESCAPED_DOLLAR__';
 
   /**
    * 规范化分隔符：去除首尾无意义空白，但保留纯空白分隔符（空格、Tab）
@@ -47,12 +50,17 @@ var TextJoinProcess = (function () {
    * @param {string[]} fields 字段数组
    */
   function applyPattern(pattern, fields) {
-    return pattern.replace(PLACEHOLDER_RE, function (match, bracedNumStr, plainNumStr) {
+    // 1) 先保护用户显式转义的 \$，避免后续占位符替换误命中
+    // 2) 执行变量替换
+    // 3) 还原字面量 $
+    var protectedPattern = String(pattern || '').replace(/\\\$/g, ESCAPED_DOLLAR_TOKEN);
+    var replaced = protectedPattern.replace(PLACEHOLDER_RE, function (match, bracedNumStr, plainNumStr) {
       var numStr = bracedNumStr || plainNumStr;
       var index = parseInt(numStr, 10) - 1;
       if (index >= 0 && index < fields.length) return fields[index];
       return match;
     });
+    return replaced.replace(new RegExp(ESCAPED_DOLLAR_TOKEN, 'g'), '$');
   }
 
   /**

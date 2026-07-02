@@ -21,6 +21,11 @@ module.exports = function (test, assert, assertEq) {
     assertEq(out, 'price=$100 item=apple');
   });
 
+  test('使用 \\$ 可输出字面量 $1', function () {
+    var out = TextJoinProcess.applyPattern('literal=\\$1 value=${1}', ['apple']);
+    assertEq(out, 'literal=$1 value=apple');
+  });
+
   test('process 跳过空行', function () {
     var r = TextJoinProcess.process('a,b\n\nc,d', ',', '$1-$2');
     assertEq(r.lineCount, 2);

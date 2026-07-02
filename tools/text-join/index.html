@@ -70,7 +70,7 @@
             </div>
             <div class="stack-item template-stack">
               <label class="io-label" for="pattern-input">模版文本（支持 $1 与 ${1} 占位符，从 1 开始）</label>
-              <textarea id="pattern-input" placeholder="输入模版文本（用 $1 / ${1} 表示拆分后的字段）…&#10;示例：create ip ${1} port ${2};"></textarea>
+              <textarea id="pattern-input" placeholder="输入模版文本（用 $1 / ${1} 表示拆分后的字段；\\$ 可输出字面量 $）…&#10;示例：create ip ${1} port ${2};"></textarea>
               <div class="template-toolbar">
                 <input type="text" id="template-label" placeholder="固定备注（可选）" maxlength="40">
                 <button type="button" class="btn btn-outline btn-sm" onclick="TextJoinApp.pinCurrentTemplate()">固定当前模版</button>
