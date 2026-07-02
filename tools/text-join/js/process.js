@@ -4,17 +4,19 @@
  * 数据流：
  *   原始文本（每行一条）
  *     → 按分隔符拆分为字段数组
- *     → 用 $1 $2… 占位符替换模版文本
+ *     → 用 $1 / ${1} 占位符替换模版文本
  *     → 逐行输出转换结果
  *
- * 占位符规则：$n 对应第 n 个字段（1-based），越界保留原占位符。
+ * 占位符规则：$n 或 ${n} 对应第 n 个字段（1-based），越界保留原占位符。
  *
  * 导出：TextJoinProcess
  */
 var TextJoinProcess = (function () {
   'use strict';
 
-  var PLACEHOLDER_RE = /\$(\d+)/g;
+  // 同时支持两种占位符：$1 与 ${1}。
+  // 使用“二选一捕获组”提取数字索引，兼容历史模板并允许新模板避开普通 $ 文本冲突。
+  var PLACEHOLDER_RE = /\$(?:\{(\d+)\}|(\d+))/g;
 
   /**
    * 规范化分隔符：去除首尾无意义空白，但保留纯空白分隔符（空格、Tab）
@@ -40,12 +42,13 @@ var TextJoinProcess = (function () {
   }
 
   /**
-   * 用字段数组替换模版中的 $n 占位符
+   * 用字段数组替换模版中的 $n / ${n} 占位符
    * @param {string} pattern 模版文本
    * @param {string[]} fields 字段数组
    */
   function applyPattern(pattern, fields) {
-    return pattern.replace(PLACEHOLDER_RE, function (match, numStr) {
+    return pattern.replace(PLACEHOLDER_RE, function (match, bracedNumStr, plainNumStr) {
+      var numStr = bracedNumStr || plainNumStr;
       var index = parseInt(numStr, 10) - 1;
       if (index >= 0 && index < fields.length) return fields[index];
       return match;
