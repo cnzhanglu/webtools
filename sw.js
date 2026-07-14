@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v38';
+var CACHE_VERSION = 'webtools-v39';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -66,9 +66,10 @@ var PRECACHE_URLS = [
   './tools/net-summary/css/tool.css',
   './tools/net-summary/js/process.js',
   './tools/net-summary/js/app.js',
-  './tools/bgp-as/',
-  './tools/bgp-as/css/tool.css',
-  './tools/bgp-as/js/app.js',
+  './tools/dynamic-routing/',
+  './tools/dynamic-routing/css/tool.css',
+  './tools/dynamic-routing/js/process.js',
+  './tools/dynamic-routing/js/app.js',
   './tools/base64-tool/',
   './tools/base64-tool/css/tool.css',
   './tools/base64-tool/js/app.js',
