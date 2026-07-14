@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v36';
+var CACHE_VERSION = 'webtools-v38';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -47,6 +47,9 @@ var PRECACHE_URLS = [
   './tools/excel2json/css/tool.css',
   './tools/excel2json/js/validate.js',
   './tools/excel2json/js/process.js',
+  './tools/excel2json/js/gslb-lookup.js',
+  './tools/excel2json/js/dns-lookup.js',
+  './tools/excel2json/js/emergency-cmd.js',
   './tools/excel2json/js/app.js',
   './shared/js/xlsx-read.js',
   './tools/gslb-json-compare/',

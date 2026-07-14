@@ -20,7 +20,7 @@
 <header class="site-header">
   <div>
     <h1>专用工具：Excel 切换 JSON 工具</h1>
-    <p>专用工具：上传域名/IP 切换 Excel，校验 D/E/F/G 列，按应用生成切换与回切 JSON，本地浏览器完成</p>
+    <p>上传域名/IP 切换 Excel、GSLB 配置和 DNS 导出包，生成切换、回切 JSON 及应急手动命令</p>
   </div>
   <a class="header-back" href="../../index.html">← 返回工具箱</a>
 </header>
@@ -31,7 +31,11 @@
   <div class="op-bar panel">
     <div class="panel-body op-body">
       <input type="file" id="file-input" accept=".xlsx" hidden>
+      <input type="file" id="gslb-file-input" accept=".json,application/json" hidden>
+      <input type="file" id="dns-file-input" accept=".zip,application/zip" hidden>
       <button class="btn btn-primary" id="btn-load" type="button">📂 上传 Excel (.xlsx)</button>
+      <button class="btn btn-outline" id="btn-load-gslb" type="button">上传 GSLB JSON</button>
+      <button class="btn btn-outline" id="btn-load-dns" type="button">上传 DNS ZIP</button>
       <button class="btn btn-success" id="btn-download-all" type="button" disabled>⬇ 全部下载</button>
       <button class="btn btn-outline" id="btn-help-toggle" type="button"
               onclick="document.getElementById('help-panel').classList.toggle('hidden')">📘 格式说明</button>
@@ -43,6 +47,7 @@
 
   <!-- 错误面板 -->
   <div class="error-box" id="error-box" style="display:none"></div>
+  <div class="warning-box" id="warning-box" style="display:none"></div>
 
   <!-- 帮助面板 -->
   <div class="panel hidden" id="help-panel">
@@ -52,17 +57,20 @@
       <table class="help-table">
         <thead><tr><th>列</th><th>含义</th><th>规则</th></tr></thead>
         <tbody>
-          <tr><td>A</td><td>应用名称</td><td>分组键；空值行整行跳过；支持合并单元格</td></tr>
+          <tr><td>A</td><td>应用名称</td><td>分组键；不能为空；支持合并单元格</td></tr>
           <tr><td>D</td><td>域名 FQDN</td><td>每行一个；符合 DNS 规范</td></tr>
-          <tr><td>E</td><td>原始 IP</td><td>动态：换行分隔多个；静态：单个 IPv4</td></tr>
+          <tr><td>E</td><td>原始 IP</td><td>动态：换行分隔多个；静态：单个 IP</td></tr>
           <tr><td>F</td><td>目标 IP</td><td>同 E 列规则</td></tr>
-          <tr><td>G</td><td>类型</td><td><code>动态</code> 或 <code>静态</code>，其他值跳过</td></tr>
+          <tr><td>G</td><td>类型</td><td>必须为 <code>动态</code> 或 <code>静态</code></td></tr>
         </tbody>
       </table>
       <p><strong>动态</strong>：集合差分。address = E 有 F 无；new_address = F 有 E 无；交集 IP 两边均不写入。</p>
       <p><strong>静态</strong>：address = [E IP]，new_address = [F IP]（允许一侧为空）；回切互换两列。</p>
       <p><strong>输出文件命名</strong>：<code>{应用名}_动态_切换.json</code>、<code>{应用名}_动态_回切.json</code>、<code>{应用名}_静态_切换.json</code>、<code>{应用名}_静态_回切.json</code></p>
       <p><strong>JSON 结构</strong>：<code>[{ "fqdn": "...", "address": [...], "new_address": [...] }]</code></p>
+      <p><strong>动态应急命令</strong>：上传 GSLB 全量 JSON，按域名和 IP 查询 <code>dc_name</code>、<code>gmember_name</code>。<code>address</code> 生成 <code>status disable</code>，<code>new_address</code> 生成 <code>status enable</code>。</p>
+      <p><strong>静态应急命令</strong>：上传含 <code>auth-zones.csv</code> 的 DNS ZIP，按域名最长后缀匹配最细权威区，生成 <code>.dns</code>、<code>modify rrs view ... rdata ... new_rdata ...</code>、<code>quit</code> 命令。</p>
+      <p><strong>匹配异常</strong>：找不到动态成员、静态权威区或静态任一侧 IP 为空时跳过并警告。</p>
     </div>
   </div>
 
@@ -79,7 +87,7 @@
     <!-- 右侧：JSON 预览 -->
     <div class="panel preview-panel">
       <div class="panel-header">
-        <h2>JSON 预览：<span id="preview-filename" style="font-weight:400;font-size:.9rem">—</span></h2>
+        <h2><span id="preview-title">文件预览：</span><span id="preview-filename" style="font-weight:400;font-size:.9rem">—</span></h2>
         <div class="btn-row">
           <button class="btn btn-outline btn-sm" id="btn-copy" type="button">复制</button>
           <button class="btn btn-success btn-sm" id="btn-download" type="button">下载</button>
@@ -87,7 +95,7 @@
       </div>
       <div class="panel-body" style="padding:0">
         <div class="json-scroll">
-          <pre id="preview-json">（请从左侧选择文件查看）</pre>
+          <pre id="preview-content">（请从左侧选择文件查看）</pre>
         </div>
       </div>
     </div>
@@ -105,6 +113,9 @@
 <script src="../../shared/js/ipcidr.js"></script>
 <script src="js/validate.js"></script>
 <script src="js/process.js"></script>
+<script src="js/gslb-lookup.js"></script>
+<script src="js/dns-lookup.js"></script>
+<script src="js/emergency-cmd.js"></script>
 <script src="js/app.js"></script>
 <script src="../../shared/js/pwa.js"></script>
 </body>

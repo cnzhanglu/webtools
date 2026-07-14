@@ -40,6 +40,20 @@
   word-break: break-all;
 }
 
+.warning-box {
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 10px 16px;
+  max-height: 180px;
+  overflow: auto;
+  font-size: .85rem;
+  line-height: 1.6;
+  color: #92400e;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* 帮助面板 */
 .help-body {
   font-size: .88rem;
@@ -128,7 +142,7 @@
   border-top: 1px solid #eaecf0;
 }
 
-#preview-json {
+#preview-content {
   margin: 0;
   padding: 14px 16px;
   font-family: "Menlo", "Consolas", "Monaco", monospace;
