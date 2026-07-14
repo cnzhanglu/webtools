@@ -43,11 +43,10 @@ API 契约见 [webtools-goBuild docs/api-dns.md](https://github.com/cnzhanglu/we
 ```
 webtools [flags]
 
-  --host string     监听地址（默认 127.0.0.1）
-  --port int        端口（默认 8080；被占用时自动尝试后续端口）
-  --open            nogui：启动后打开系统默认浏览器
-  --service         gui 构建：仅 HTTP，不打开内嵌窗口
-  --version         打印版本并退出
+  --host string   监听地址（默认 127.0.0.1）
+  --port int      端口（默认 8080；被占用时自动尝试后续端口）
+  --open          启动后打开系统默认浏览器
+  --version       打印版本并退出
 ```
 
 可选 **webtools-gui** 构建提供内嵌 WebView 窗口，默认加载门户首页。
