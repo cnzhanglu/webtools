@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v34';
+var CACHE_VERSION = 'webtools-v39';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -39,6 +39,7 @@ var PRECACHE_URLS = [
   './tools/gslb-json-export/css/tool.css',
   './tools/gslb-json-export/js/fields.js',
   './tools/gslb-json-export/js/process.js',
+  './tools/gslb-json-export/js/commands.js',
   './tools/gslb-json-export/js/graph.js',
   './tools/gslb-json-export/js/transfer.js',
   './tools/gslb-json-export/js/app.js',
@@ -46,6 +47,9 @@ var PRECACHE_URLS = [
   './tools/excel2json/css/tool.css',
   './tools/excel2json/js/validate.js',
   './tools/excel2json/js/process.js',
+  './tools/excel2json/js/gslb-lookup.js',
+  './tools/excel2json/js/dns-lookup.js',
+  './tools/excel2json/js/emergency-cmd.js',
   './tools/excel2json/js/app.js',
   './shared/js/xlsx-read.js',
   './tools/gslb-json-compare/',
@@ -62,9 +66,10 @@ var PRECACHE_URLS = [
   './tools/net-summary/css/tool.css',
   './tools/net-summary/js/process.js',
   './tools/net-summary/js/app.js',
-  './tools/bgp-as/',
-  './tools/bgp-as/css/tool.css',
-  './tools/bgp-as/js/app.js',
+  './tools/dynamic-routing/',
+  './tools/dynamic-routing/css/tool.css',
+  './tools/dynamic-routing/js/process.js',
+  './tools/dynamic-routing/js/app.js',
   './tools/base64-tool/',
   './tools/base64-tool/css/tool.css',
   './tools/base64-tool/js/app.js',

@@ -13,3 +13,6 @@ webtools-goBuild/
 
 # 本地知识库分享稿（不纳入版本库）
 share-工具箱知识库.md
+
+# 本地临时数据（DNS/GSLB 等，勿提交）
+tmp/

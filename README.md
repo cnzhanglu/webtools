@@ -39,7 +39,7 @@
     ├── subnet-calc/
     ├── cidr-vs/
     ├── net-summary/
-    ├── bgp-as/
+    ├── dynamic-routing/
     ├── base64-tool/
     ├── punycode-tool/
     ├── url-codec/
@@ -58,7 +58,7 @@
 | 子网掩码计算器 | `tools/subnet-calc/` | IPv4/IPv6 网络参数计算 | [tools/subnet-calc/README.md](tools/subnet-calc/README.md) |
 | CIDR 网段对比 | `tools/cidr-vs/` | 检查 B 清单是否被 A 覆盖 | [tools/cidr-vs/README.md](tools/cidr-vs/README.md) |
 | 网段汇总合并 | `tools/net-summary/` | 清单标准化与网段最小化汇总 | [tools/net-summary/README.md](tools/net-summary/README.md) |
-| BGP AS 号转换 | `tools/bgp-as/` | ASPlain / ASDOT 互转 | [tools/bgp-as/README.md](tools/bgp-as/README.md) |
+| 动态路由工具 | `tools/dynamic-routing/` | BGP AS 互转 + OSPF Area ID 互转 | [tools/dynamic-routing/README.md](tools/dynamic-routing/README.md) |
 | Base64 编解码 | `tools/base64-tool/` | 文本/文件 Base64 编解码 | [tools/base64-tool/README.md](tools/base64-tool/README.md) |
 | Punycode 域名编解码 | `tools/punycode-tool/` | Unicode 域名与 `xn--` 互转 | [tools/punycode-tool/README.md](tools/punycode-tool/README.md) |
 | URL 编解码 | `tools/url-codec/` | 单行/批量 URL 编解码 + diff | [tools/url-codec/README.md](tools/url-codec/README.md) |

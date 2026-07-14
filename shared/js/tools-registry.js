@@ -38,11 +38,11 @@ var BocToolRegistry = {
       status: 'ready',
     },
     {
-      id: 'bgp-as',
-      name: 'BGP AS 号转换',
-      description: '将 BGP AS 号在十进制与带点格式（ASDOT / ASDOT+）之间互转，支持 2 字节与 4 字节 AS，批量处理并标注 AS 号用途范围。',
-      tags: ['网络', 'BGP', 'AS'],
-      path: 'tools/bgp-as/index.html',
+      id: 'dynamic-routing',
+      name: '动态路由工具',
+      description: 'BGP AS 号（十进制 ↔ ASDOT）互转，支持 2/4 字节 AS 批量处理；OSPF Area ID（纯整数 ↔ 点分十进制）互转，骨干区域自动标注。',
+      tags: ['网络', 'BGP', 'OSPF', '动态路由', 'AS'],
+      path: 'tools/dynamic-routing/index.html',
       status: 'ready',
     },
     {

@@ -87,6 +87,23 @@ loadScript('tools/excel2json/js/process.js');
 console.log('\nExcel2JsonProcess');
 require('./excel2json-process.test.js')(test, assert, assertEq);
 
+loadScript('tools/excel2json/js/gslb-lookup.js');
+loadScript('tools/excel2json/js/dns-lookup.js');
+loadScript('tools/excel2json/js/emergency-cmd.js');
+console.log('\nExcel2JsonEmergency');
+require('./excel2json-emergency.test.js')(test, assert, assertEq);
+
+loadScript('shared/js/utils.js');
+loadScript('tools/gslb-json-export/js/fields.js');
+loadScript('tools/gslb-json-export/js/process.js');
+loadScript('tools/gslb-json-export/js/commands.js');
+console.log('\nGslbCommands');
+require('./gslb-commands.test.js')(test, assert, assertEq);
+
+loadScript('tools/dynamic-routing/js/process.js');
+console.log('\nDynamicRoutingProcess');
+require('./dynamic-routing.test.js')(test, assert, assertEq);
+
 console.log('\nSW / Registry');
 require('./sw-precache.test.js')(test, assert, assertEq, ROOT);
 

@@ -1,6 +1,8 @@
 /**
  * 纯 JS xlsx 读取器（ZIP + DEFLATE inflate + OOXML 解析，无外部依赖）
- * 用法：BocXlsxRead.parse(arrayBuffer) → { rows: [{rowIndex, A-H, ...}] }
+ * 导出：
+ * - BocXlsxRead.parse(arrayBuffer) → { rows: [{rowIndex, A-H, ...}] }
+ * - BocXlsxRead.readZip(arrayBuffer) → { "路径": Uint8Array }，供 DNS 导出包等复用
  * - 读取第一个工作表
  * - 解析 sharedStrings、inlineStr、数字单元格
  * - 解析 mergeCells 并回填（上方 TL 值覆盖同合并区域的空格）
@@ -410,5 +412,14 @@ var BocXlsxRead = (function () {
     return { rows: parseSheet(xmlDoc(sheetData), ss, sheetOpts), sheetName: resolvedName };
   }
 
-  return { parse: parse };
+  /**
+   * 解压 ZIP 并返回「文件路径 → Uint8Array」。
+   * 复用 xlsx 的纯 JS 解压能力，供 excel2json 读取 DNS 导出包；不写入本地文件。
+   */
+  function readZipFiles(arrayBuffer) {
+    var buf = arrayBuffer instanceof Uint8Array ? arrayBuffer : new Uint8Array(arrayBuffer);
+    return readZip(buf);
+  }
+
+  return { parse: parse, readZip: readZipFiles };
 }());

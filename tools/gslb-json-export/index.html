@@ -65,6 +65,10 @@
     </div>
     <div class="preview-toolbar">
       <input type="search" id="filter-query" class="filter-input" placeholder="搜索域名 / 地址池 / 成员 / 任意字段…" autocomplete="off">
+      <select id="filter-match" class="filter-select">
+        <option value="contains">包含</option>
+        <option value="equals">等于</option>
+      </select>
       <select id="filter-scope" class="filter-select">
         <option value="all">全部字段</option>
         <option value="domain">仅域名</option>
@@ -74,6 +78,7 @@
       <button class="btn btn-primary btn-sm" id="btn-filter-query" type="button">查询</button>
       <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
       <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
+      <button class="btn btn-outline btn-sm" id="btn-gen-cmds" type="button" disabled title="请先导入 JSON 并点击「预览」">⚙ 生成创建命令</button>
       <div class="view-tabs">
         <button class="view-tab active" id="tab-table" type="button">表格预览</button>
         <button class="view-tab" id="tab-graph" type="button">关系图</button>
@@ -107,6 +112,24 @@
 
 </div>
 
+<!-- 创建命令弹窗 -->
+<div class="modal-overlay" id="cmds-overlay">
+  <div class="modal-box modal-box-wide">
+    <div class="modal-header">⚙ 生成创建命令</div>
+    <div class="modal-body">
+      <div class="cmds-disclaimer">该功能仅测试环境使用，生成的配置无法确保原始顺序，如果有GA算法可能解析不一致。未提供探测模版、静态就近创建，解析兜底策略不准确。<br>如有特殊需求，反馈给我，我来更新。</div>
+      <div class="cmds-warning-bar" id="cmds-warning-bar" style="display:none"></div>
+      <div class="cmds-meta" id="cmds-meta"></div>
+      <pre class="cmds-pre" id="cmds-pre"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-cmds-copy" type="button">复制全部</button>
+      <button class="btn btn-outline" id="btn-cmds-download" type="button">下载 TXT</button>
+      <button class="btn btn-outline" id="btn-close-cmds" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- 帮助弹窗 -->
 <div class="modal-overlay" id="help-overlay">
   <div class="modal-box">
@@ -124,12 +147,14 @@
 4 支持虚拟滚动预览大量数据；输入关键字后点击「查询」或按回车过滤，支持 Ctrl+C 复制选中行
 5 点击表格行选择域名，再查看该域名的「域名 → 地址池 → 服务成员」引用关系图（节点与连线展示关键参数）
 6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
+7 点击「生成创建命令」可基于当前过滤域名生成完整的 create gslb ... CLI 命令（支持复制与 TXT 下载）
 
 操作步骤：
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
 2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件
 3. 在字段配置区选择需要导出的字段，可排序
 4. 点击「预览」查看表格；点击某行选择域名，再点「查看关系图」或双击行查看引用拓扑
+4a. 可选：在搜索框输入关键字过滤域名，再点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
 5. 点击「导出 CSV」生成明细导出；点击「导出域名列表 CSV」按域名去重聚合导出
 6. 点击「导出域名列表 TXT」可导出空格分隔文本（无标题行）
 7. 点击「导出未引用地址池 CSV」导出未被任何域名引用的地址池（列取自地址池/成员字段选择）
@@ -158,6 +183,7 @@
 <script src="../../shared/js/utils.js"></script>
 <script src="js/fields.js"></script>
 <script src="js/process.js"></script>
+<script src="js/commands.js"></script>
 <script src="js/graph.js"></script>
 <script src="js/transfer.js"></script>
 <script src="js/app.js"></script>

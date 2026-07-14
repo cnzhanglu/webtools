@@ -4,9 +4,10 @@
  * 数据流：
  *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
  *   → 点击查询/回车过滤 → 可选关系图 / CSV 导出（UTF-8 BOM）
+ *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
  *
  * 模块分工：GslbFields（方案）、GslbTransfer（选列）、GslbProcess（行数据）、
- *          GslbGraph（拓扑图）、BocUtils（下载）
+ *          GslbGraph（拓扑图）、GslbCommands（命令生成）、BocUtils（下载）
  */
 var GslbApp = (function () {
   'use strict';
@@ -20,7 +21,7 @@ var GslbApp = (function () {
   var displayRows = [];
   var selectedDomainName = '';
   var selectedRowIndices = {};
-  var filterState = { query: '', scope: 'all' };
+  var filterState = { query: '', scope: 'all', match: 'contains' };
   var activeView = 'table';
 
   var groupDomain = null;
@@ -80,6 +81,14 @@ var GslbApp = (function () {
       if (e.target === this) hideHelp();
     });
 
+    document.getElementById('btn-gen-cmds').addEventListener('click', generateCreateCommands);
+    document.getElementById('btn-close-cmds').addEventListener('click', hideCmdsModal);
+    document.getElementById('cmds-overlay').addEventListener('click', function (e) {
+      if (e.target === this) hideCmdsModal();
+    });
+    document.getElementById('btn-cmds-copy').addEventListener('click', copyCmds);
+    document.getElementById('btn-cmds-download').addEventListener('click', downloadCmdsTxt);
+
     schemeSelect.addEventListener('change', function () {
       pref.last_scheme = schemeSelect.value;
       GslbFields.savePref(pref);
@@ -114,6 +123,7 @@ var GslbApp = (function () {
 
     refreshFieldLists();
     updateViewGraphButton();
+    updateGenCmdsButton();
     bindVirtualScroll();
     setStatus('状态：尚未加载 JSON');
   }
@@ -136,6 +146,7 @@ var GslbApp = (function () {
   /** 从输入框读取条件并执行过滤（点击查询或回车触发） */
   function onFilterQuery() {
     filterState.query = document.getElementById('filter-query').value;
+    filterState.match = document.getElementById('filter-match').value;
     filterState.scope = document.getElementById('filter-scope').value;
     applyFilterAndRender();
   }
@@ -143,13 +154,16 @@ var GslbApp = (function () {
   function clearFilter() {
     filterState.query = '';
     filterState.scope = 'all';
+    filterState.match = 'contains';
     document.getElementById('filter-query').value = '';
+    document.getElementById('filter-match').value = 'contains';
     document.getElementById('filter-scope').value = 'all';
     applyFilterAndRender();
   }
 
   function syncFilterFromInputs() {
     filterState.query = document.getElementById('filter-query').value;
+    filterState.match = document.getElementById('filter-match').value;
     filterState.scope = document.getElementById('filter-scope').value;
   }
 
@@ -202,11 +216,16 @@ var GslbApp = (function () {
     setActiveView('graph');
   }
 
-  function filterRows(rows, query, scope, columns) {
+  /**
+   * 按查询条件过滤行。
+   * @param {string} match  'contains'（包含，大小写不敏感）或 'equals'（精确等于，大小写不敏感）
+   */
+  function filterRows(rows, query, scope, columns, match) {
     if (!query) return rows;
     var q = query.toLowerCase();
+    var exactMatch = (match === 'equals');
     var filtered = [];
-    var r, c, col, val;
+    var r, c, col, val, valStr;
 
     for (r = 0; r < rows.length; r++) {
       var row = rows[r];
@@ -217,7 +236,9 @@ var GslbApp = (function () {
         if (scope === 'pool' && col.indexOf('pool.') !== 0) continue;
         if (scope === 'member' && col.indexOf('member.') !== 0) continue;
         val = row[col];
-        if (val !== null && val !== undefined && String(val).toLowerCase().indexOf(q) !== -1) {
+        if (val === null || val === undefined) continue;
+        valStr = String(val).toLowerCase();
+        if (exactMatch ? valStr === q : valStr.indexOf(q) !== -1) {
           matched = true;
           break;
         }
@@ -400,7 +421,7 @@ var GslbApp = (function () {
       renderPreviewTable();
       return;
     }
-    displayRows = filterRows(previewRows, filterState.query, filterState.scope, previewColumns);
+    displayRows = filterRows(previewRows, filterState.query, filterState.scope, previewColumns, filterState.match);
     resetPreviewScroll();
     renderPreviewTable();
   }
@@ -425,6 +446,7 @@ var GslbApp = (function () {
       measuredRowHeight = 0;
       selectedDomainName = '';
       updateViewGraphButton();
+      updateGenCmdsButton();
       GslbGraph.render(null, null, '');
       setStatus('状态：已加载文件 ' + file.name);
       refreshFieldLists();
@@ -540,6 +562,7 @@ var GslbApp = (function () {
     selectedDomainName = '';
     selectedRowIndices = {};
     updateViewGraphButton();
+    updateGenCmdsButton();
 
     syncFilterFromInputs();
     applyFilterAndRender();
@@ -698,6 +721,96 @@ var GslbApp = (function () {
     var filename = 'gslb_orphan_member_' + new Date().toISOString().slice(0, 10) + '.csv';
     BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
     alert('已导出未引用的服务成员 CSV：' + filename);
+  }
+
+  /** 当前命令弹窗的文本内容（用于复制/下载） */
+  var currentCmdsText = '';
+
+  /** 从 displayRows 提取去重的域名记录键（name + type），返回 [{name, type}, ...] */
+  function getFilteredDomainKeys() {
+    var seen = {};
+    var keys = [];
+    var i, row, name, type, k;
+    for (i = 0; i < displayRows.length; i++) {
+      row = displayRows[i];
+      name = row['domain.name'] || row._domainName || '';
+      type = row['domain.type'] || '';
+      if (!name) continue;
+      k = name + '\0' + type;
+      if (!seen[k]) {
+        seen[k] = true;
+        keys.push({ name: name, type: type });
+      }
+    }
+    return keys;
+  }
+
+  /** 更新「生成创建命令」按钮可用状态 */
+  function updateGenCmdsButton() {
+    var btn = document.getElementById('btn-gen-cmds');
+    if (!btn) return;
+    btn.disabled = !jsonData || !previewRows.length;
+  }
+
+  /** 按过滤后域名记录生成 CLI 命令并弹窗展示 */
+  function generateCreateCommands() {
+    if (!jsonData) {
+      alert('请先导入 JSON。');
+      return;
+    }
+    if (!previewRows.length) {
+      alert('请先点击「预览」加载数据。');
+      return;
+    }
+
+    var domainKeys = getFilteredDomainKeys();
+    if (!domainKeys.length) {
+      alert('当前过滤结果中未找到域名记录，请检查搜索条件或先点击「预览」。');
+      return;
+    }
+
+    var result = GslbCommands.buildCommandsForDomains(jsonData, domainKeys, dcMemberIndex);
+    var lines = result.lines;
+    var warnings = result.warnings;
+
+    currentCmdsText = lines.join('\n');
+
+    // 显示警告条
+    var warningBar = document.getElementById('cmds-warning-bar');
+    if (warnings.length) {
+      warningBar.textContent = '⚠ ' + warnings.join('\n⚠ ');
+      warningBar.style.display = '';
+    } else {
+      warningBar.style.display = 'none';
+    }
+
+    // 元信息
+    var meta = document.getElementById('cmds-meta');
+    var domainCount = domainKeys.length;
+    var cmdCount = lines.filter(function (l) { return l.indexOf('create ') === 0; }).length;
+    var matchLabel = filterState.match === 'equals' ? '等于' : '包含';
+    meta.textContent = '共 ' + domainCount + ' 条域名记录，生成 ' + cmdCount + ' 条命令'
+      + (filterState.query ? '（过滤：' + matchLabel + ' "' + filterState.query + '"）' : '（全部预览域名）');
+
+    // 命令文本
+    document.getElementById('cmds-pre').textContent = currentCmdsText;
+
+    document.getElementById('cmds-overlay').classList.add('visible');
+  }
+
+  function hideCmdsModal() {
+    document.getElementById('cmds-overlay').classList.remove('visible');
+  }
+
+  function copyCmds() {
+    if (!currentCmdsText) return;
+    BocUtils.copyText(currentCmdsText);
+  }
+
+  function downloadCmdsTxt() {
+    if (!currentCmdsText) return;
+    var filename = 'gslb_create_cmds_' + new Date().toISOString().slice(0, 10) + '.txt';
+    BocUtils.downloadBlob(currentCmdsText, filename, 'text/plain;charset=utf-8');
   }
 
   function showHelp() {
