@@ -400,7 +400,8 @@ var GslbProcess = (function () {
 
   /**
    * 将 ADD 域名列表按「域名 × 地址池引用 × 池成员」笛卡尔展开为扁平行；
-   * 每行按 orders 中字段顺序填充，并附带 _domainName 供过滤/关系图使用。
+   * 每行按 orders 中字段顺序填充，并附带 _domainName / _domainType 供过滤/关系图使用。
+   * name+type 共同构成唯一键（同名不同类型的域名视为独立记录）。
    */
   function buildAddRows(jsonData, orders, dcMemberIndex) {
     var rows = [];
@@ -443,6 +444,7 @@ var GslbProcess = (function () {
 
           rows.push(row);
           row._domainName = dom.name || '';
+          row._domainType = dom.type || '';
         }
       }
     }
@@ -588,7 +590,12 @@ var GslbProcess = (function () {
     return out;
   }
 
-  function buildTopology(jsonData, dcMemberIndex, domainName) {
+  /**
+   * 构建指定域名（name+type 唯一确定）的引用拓扑。
+   * @param {string} domainName  域名名称（必须）
+   * @param {string} domainType  域名类型（A/AAAA 等；必须传入以精确匹配，避免同名不同类型串图）
+   */
+  function buildTopology(jsonData, dcMemberIndex, domainName, domainType) {
     var empty = { domains: [], pools: [], members: [], edges: [] };
     if (!jsonData || typeof jsonData !== 'object') return empty;
 
@@ -604,8 +611,10 @@ var GslbProcess = (function () {
     var edges = [];
     var edgeSeen = {};
     var r, gpRefIdx, gmIdx, dom, gpRefs, gpRef, gpName, gpObj, members, gm;
-    var domName, poolId, memberId, edgeKey, k, v, dcName, gmemberName, dcGm;
-    var onlyDomain = domainName ? String(domainName) : '';
+    var domName, domType, domKey, poolId, memberId, edgeKey, k, v, dcName, gmemberName, dcGm;
+    var onlyName = domainName ? String(domainName) : '';
+    // domainType 可为空字符串（对应无类型记录），null 表示不限制
+    var onlyType = (domainType !== undefined && domainType !== null) ? String(domainType) : null;
 
     function addEdge(from, to, kind, params) {
       edgeKey = from + '\0' + to + '\0' + kind;
@@ -619,10 +628,14 @@ var GslbProcess = (function () {
       if (!dom || typeof dom !== 'object') continue;
 
       domName = dom.name || ('domain_' + r);
-      if (onlyDomain && domName !== onlyDomain) continue;
-      if (!domainMap[domName]) {
-        domainMap[domName] = {
-          id: 'domain:' + domName,
+      domType = dom.type || '';
+      // 精确匹配 name+type，避免同名不同类型（A/AAAA）互相串图
+      if (onlyName && domName !== onlyName) continue;
+      if (onlyType !== null && domType !== onlyType) continue;
+      domKey = domName + '\0' + domType;
+      if (!domainMap[domKey]) {
+        domainMap[domKey] = {
+          id: 'domain:' + domName + '\0' + domType,
           name: domName,
           params: pickScalarParams(dom, { gpool_list: true, alias_list: true })
         };
@@ -653,7 +666,7 @@ var GslbProcess = (function () {
           poolOrder.push(poolId);
         }
 
-        addEdge('domain:' + domName, poolId, 'domain-pool', pickScalarParams(gpRef));
+        addEdge('domain:' + domName + '\0' + domType, poolId, 'domain-pool', pickScalarParams(gpRef));
 
         gpObj = gpMap[gpName] || {};
         members = (gpObj && typeof gpObj === 'object') ? sortMembersBySeq(gpObj.gmember_list || []) : [];
