@@ -3,8 +3,11 @@
  *
  * 数据流：
  *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
- *   → 点击查询/回车过滤 → 可选关系图 / CSV 导出（UTF-8 BOM）
+ *   → 点击查询/回车过滤（始终匹配域名名称与类型）→ 点击表格行在下方实时渲染关系图 / CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
+ *
+ * 布局：表格始终可见，关系图固定显示在表格下方；重新查询/清除过滤时关系图自动清空
+ * 唯一键：域名名称 + 域名类型（name+type），与 commands.js 保持一致
  *
  * 模块分工：GslbFields（方案）、GslbTransfer（选列）、GslbProcess（行数据）、
  *          GslbGraph（拓扑图）、GslbCommands（命令生成）、BocUtils（下载）
@@ -19,10 +22,10 @@ var GslbApp = (function () {
   var previewColumns = [];
   var previewRows = [];
   var displayRows = [];
-  var selectedDomainName = '';
+  /** 当前选中的域名唯一键；name+type 共同确定一条域名记录 */
+  var selectedDomainKey = { name: '', type: '' };
   var selectedRowIndices = {};
   var filterState = { query: '', scope: 'all', match: 'contains' };
-  var activeView = 'table';
 
   var groupDomain = null;
   var groupPool = null;
@@ -104,9 +107,13 @@ var GslbApp = (function () {
     });
     document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
 
-    document.getElementById('tab-table').addEventListener('click', function () { setActiveView('table'); });
-    document.getElementById('tab-graph').addEventListener('click', function () { setActiveView('graph'); });
     document.getElementById('btn-view-graph').addEventListener('click', viewSelectedDomainGraph);
+    document.getElementById('btn-graph-zoom-in').addEventListener('click', function () {
+      GslbGraph.zoomIn();
+    });
+    document.getElementById('btn-graph-zoom-out').addEventListener('click', function () {
+      GslbGraph.zoomOut();
+    });
     document.getElementById('btn-graph-reset').addEventListener('click', function () {
       GslbGraph.resetView();
     });
@@ -135,19 +142,21 @@ var GslbApp = (function () {
   function updateViewGraphButton() {
     var btn = document.getElementById('btn-view-graph');
     if (!btn) return;
-    btn.disabled = !selectedDomainName;
-    if (selectedDomainName) {
-      btn.title = '查看域名「' + selectedDomainName + '」的引用关系图';
+    btn.disabled = !selectedDomainKey.name;
+    if (selectedDomainKey.name) {
+      var label = selectedDomainKey.name + (selectedDomainKey.type ? ' (' + selectedDomainKey.type + ')' : '');
+      btn.title = '查看域名「' + label + '」的引用关系图';
     } else {
       btn.title = '请先在表格中点击一行选择域名';
     }
   }
 
-  /** 从输入框读取条件并执行过滤（点击查询或回车触发） */
+  /** 从输入框读取条件并执行过滤（点击查询或回车触发）；过滤后清空关系图与行选中 */
   function onFilterQuery() {
     filterState.query = document.getElementById('filter-query').value;
     filterState.match = document.getElementById('filter-match').value;
     filterState.scope = document.getElementById('filter-scope').value;
+    clearSelectionAndGraph();
     applyFilterAndRender();
   }
 
@@ -158,7 +167,16 @@ var GslbApp = (function () {
     document.getElementById('filter-query').value = '';
     document.getElementById('filter-match').value = 'contains';
     document.getElementById('filter-scope').value = 'all';
+    clearSelectionAndGraph();
     applyFilterAndRender();
+  }
+
+  /** 清空行选中状态与关系图，重新查询时调用 */
+  function clearSelectionAndGraph() {
+    selectedDomainKey = { name: '', type: '' };
+    selectedRowIndices = {};
+    updateViewGraphButton();
+    GslbGraph.render(null, null, '');
   }
 
   function syncFilterFromInputs() {
@@ -188,37 +206,37 @@ var GslbApp = (function () {
     if (scrollEl) scrollEl.scrollTop = 0;
   }
 
-  function setActiveView(view) {
-    activeView = view;
-    document.getElementById('tab-table').classList.toggle('active', view === 'table');
-    document.getElementById('tab-graph').classList.toggle('active', view === 'graph');
-    document.getElementById('view-table').classList.toggle('hidden', view !== 'table');
-    document.getElementById('view-graph').classList.toggle('hidden', view !== 'graph');
-    if (view === 'graph') {
-      renderDomainGraph(selectedDomainName);
-    }
-  }
-
-  function renderDomainGraph(domainName) {
-    if (!jsonData || !domainName) {
-      GslbGraph.render(null, null, domainName);
+  /**
+   * 渲染关系图。
+   * @param {string} name  域名名称
+   * @param {string} type  域名类型（A/AAAA 等）
+   */
+  function renderDomainGraph(name, type) {
+    if (!jsonData || !name) {
+      GslbGraph.render(null, null, '');
       return;
     }
-    var topology = GslbProcess.buildTopology(jsonData, dcMemberIndex, domainName);
-    GslbGraph.render(topology, null, domainName);
+    // 构建展示标签：有类型时显示 "name (type)"
+    var displayLabel = name + (type ? ' (' + type + ')' : '');
+    var topology = GslbProcess.buildTopology(jsonData, dcMemberIndex, name, type);
+    GslbGraph.render(topology, null, displayLabel);
   }
 
+  /** 点击「查看关系图」按钮时，直接在下方渲染（表格始终可见，无需切 tab） */
   function viewSelectedDomainGraph() {
-    if (!selectedDomainName) {
+    if (!selectedDomainKey.name) {
       alert('请先在表格中点击一行选择域名。');
       return;
     }
-    setActiveView('graph');
+    renderDomainGraph(selectedDomainKey.name, selectedDomainKey.type);
   }
 
   /**
    * 按查询条件过滤行。
    * @param {string} match  'contains'（包含，大小写不敏感）或 'equals'（精确等于，大小写不敏感）
+   *
+   * 当 scope 为 all 或 domain 时，始终先匹配行的 _domainName / _domainType 元数据，
+   * 不依赖「域名名称」或「域名类型」列是否已勾选。
    */
   function filterRows(rows, query, scope, columns, match) {
     if (!query) return rows;
@@ -227,20 +245,35 @@ var GslbApp = (function () {
     var filtered = [];
     var r, c, col, val, valStr;
 
+    function hit(str) {
+      if (!str) return false;
+      var s = String(str).toLowerCase();
+      return exactMatch ? s === q : s.indexOf(q) !== -1;
+    }
+
     for (r = 0; r < rows.length; r++) {
       var row = rows[r];
       var matched = false;
-      for (c = 0; c < columns.length; c++) {
-        col = columns[c];
-        if (scope === 'domain' && col.indexOf('domain.') !== 0) continue;
-        if (scope === 'pool' && col.indexOf('pool.') !== 0) continue;
-        if (scope === 'member' && col.indexOf('member.') !== 0) continue;
-        val = row[col];
-        if (val === null || val === undefined) continue;
-        valStr = String(val).toLowerCase();
-        if (exactMatch ? valStr === q : valStr.indexOf(q) !== -1) {
-          matched = true;
-          break;
+
+      // 1. 先匹配域名元数据（不依赖勾选列）
+      if (scope === 'all' || scope === 'domain') {
+        matched = hit(row._domainName) || hit(row._domainType);
+      }
+
+      // 2. 再扫预览列
+      if (!matched) {
+        for (c = 0; c < columns.length; c++) {
+          col = columns[c];
+          if (scope === 'domain' && col.indexOf('domain.') !== 0) continue;
+          if (scope === 'pool' && col.indexOf('pool.') !== 0) continue;
+          if (scope === 'member' && col.indexOf('member.') !== 0) continue;
+          val = row[col];
+          if (val === null || val === undefined) continue;
+          valStr = String(val).toLowerCase();
+          if (exactMatch ? valStr === q : valStr.indexOf(q) !== -1) {
+            matched = true;
+            break;
+          }
         }
       }
       if (matched) filtered.push(row);
@@ -261,7 +294,11 @@ var GslbApp = (function () {
   function buildTableRow(row, columns, rowIndex) {
     var tr = document.createElement('tr');
     var domainName = row._domainName || row['domain.name'] || '';
-    if (domainName) tr.setAttribute('data-domain', domainName);
+    var domainType = row._domainType !== undefined ? row._domainType : (row['domain.type'] || '');
+    if (domainName) {
+      tr.setAttribute('data-domain', domainName);
+      tr.setAttribute('data-domain-type', domainType);
+    }
     if (rowIndex !== undefined && rowIndex !== null) {
       tr.setAttribute('data-row-index', String(rowIndex));
       if (selectedRowIndices[String(rowIndex)]) tr.classList.add('selected');
@@ -380,12 +417,13 @@ var GslbApp = (function () {
   }
 
   function restoreRowSelection() {
-    if (!selectedDomainName) return;
+    if (!selectedDomainKey.name) return;
     var tbody = document.getElementById('preview-body');
     var trs = tbody.querySelectorAll('tr[data-domain]');
     var i;
     for (i = 0; i < trs.length; i++) {
-      if (trs[i].getAttribute('data-domain') === selectedDomainName) {
+      if (trs[i].getAttribute('data-domain') === selectedDomainKey.name &&
+          trs[i].getAttribute('data-domain-type') === selectedDomainKey.type) {
         trs[i].classList.add('selected');
         break;
       }
@@ -396,7 +434,7 @@ var GslbApp = (function () {
     var domainName = tr.getAttribute('data-domain') || '';
     if (!domainName) return;
 
-    selectedDomainName = domainName;
+    selectedDomainKey = { name: domainName, type: tr.getAttribute('data-domain-type') || '' };
     updateViewGraphButton();
 
     var tbody = document.getElementById('preview-body');
@@ -405,9 +443,7 @@ var GslbApp = (function () {
     for (i = 0; i < rows.length; i++) rows[i].classList.remove('selected');
     tr.classList.add('selected');
 
-    if (activeView === 'graph') {
-      renderDomainGraph(selectedDomainName);
-    }
+    renderDomainGraph(selectedDomainKey.name, selectedDomainKey.type);
   }
 
   function applyFilterAndRender() {
@@ -444,7 +480,7 @@ var GslbApp = (function () {
       previewRows = [];
       displayRows = [];
       measuredRowHeight = 0;
-      selectedDomainName = '';
+      selectedDomainKey = { name: '', type: '' };
       updateViewGraphButton();
       updateGenCmdsButton();
       GslbGraph.render(null, null, '');
@@ -559,14 +595,13 @@ var GslbApp = (function () {
     previewColumns = columns;
     previewRows = rows;
     measuredRowHeight = 0;
-    selectedDomainName = '';
+    selectedDomainKey = { name: '', type: '' };
     selectedRowIndices = {};
     updateViewGraphButton();
     updateGenCmdsButton();
 
     syncFilterFromInputs();
     applyFilterAndRender();
-    setActiveView('table');
     GslbGraph.render(null, null, '');
   }
 
@@ -582,10 +617,11 @@ var GslbApp = (function () {
       for (i = 0; i < keys.length; i++) {
         rowsToCopy.push(displayRows[Number(keys[i])]);
       }
-    } else if (selectedDomainName) {
+    } else if (selectedDomainKey.name) {
       for (i = 0; i < displayRows.length; i++) {
         var dn = displayRows[i]._domainName || displayRows[i]['domain.name'] || '';
-        if (dn === selectedDomainName) rowsToCopy.push(displayRows[i]);
+        var dt = displayRows[i]._domainType !== undefined ? displayRows[i]._domainType : (displayRows[i]['domain.type'] || '');
+        if (dn === selectedDomainKey.name && dt === selectedDomainKey.type) rowsToCopy.push(displayRows[i]);
       }
     } else {
       var active = document.activeElement;
@@ -836,10 +872,11 @@ var GslbApp = (function () {
         tr.classList.toggle('selected');
         if (tr.classList.contains('selected')) {
           selectDomainFromRow(tr);
-        } else if (selectedDomainName === tr.getAttribute('data-domain')) {
-          selectedDomainName = '';
+        } else if (selectedDomainKey.name === tr.getAttribute('data-domain') &&
+                   selectedDomainKey.type === (tr.getAttribute('data-domain-type') || '')) {
+          selectedDomainKey = { name: '', type: '' };
           updateViewGraphButton();
-          if (activeView === 'graph') GslbGraph.render(null, null, '');
+          GslbGraph.render(null, null, '');
         }
         return;
       }

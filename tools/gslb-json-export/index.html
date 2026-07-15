@@ -79,10 +79,6 @@
       <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
       <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
       <button class="btn btn-outline btn-sm" id="btn-gen-cmds" type="button" disabled title="请先导入 JSON 并点击「预览」">⚙ 生成创建命令</button>
-      <div class="view-tabs">
-        <button class="view-tab active" id="tab-table" type="button">表格预览</button>
-        <button class="view-tab" id="tab-graph" type="button">关系图</button>
-      </div>
     </div>
     <div class="panel-body" id="view-table">
       <div class="preview-scroll" id="preview-scroll">
@@ -94,14 +90,17 @@
         </table>
       </div>
     </div>
-    <div class="panel-body hidden" id="view-graph">
-      <div class="graph-toolbar">
+    <div class="panel-body" id="view-graph">
+      <div class="graph-section-header">
+        <span class="graph-section-title">域名引用关系图</span>
         <span class="stat-badge" id="graph-badge">—</span>
+        <button class="btn btn-outline btn-sm" id="btn-graph-zoom-out" type="button" title="缩小">− 缩小</button>
+        <button class="btn btn-outline btn-sm" id="btn-graph-zoom-in" type="button" title="放大">+ 放大</button>
         <button class="btn btn-outline btn-sm" id="btn-graph-reset" type="button">重置视图</button>
       </div>
       <div class="graph-layout">
         <div class="graph-svg-wrap" id="graph-svg-wrap">
-          <div class="graph-empty">在表格中点击一行选择域名，再点击「查看关系图」或双击行查看该域名的引用关系</div>
+          <div class="graph-empty">点击上方表格中的任意行，在此查看该域名的「域名 → 地址池 → 服务成员」引用关系；重新查询后图自动清空</div>
         </div>
         <div class="graph-detail" id="graph-detail">
           <div class="graph-detail-empty">点击节点查看完整参数</div>
@@ -145,7 +144,7 @@
 2 支持字段方案记忆（自动记忆最近配置，保存在浏览器本地）
 3 支持高级字段：HMS、Pass、池启用、DC启用等
 4 支持虚拟滚动预览大量数据；输入关键字后点击「查询」或按回车过滤，支持 Ctrl+C 复制选中行
-5 点击表格行选择域名，再查看该域名的「域名 → 地址池 → 服务成员」引用关系图（节点与连线展示关键参数）
+5 点击表格行选择域名，下方关系图实时展示「域名 → 地址池 → 服务成员」引用拓扑；关系图以「域名名称 + 类型」区分（同名 A/AAAA 互不干扰）；搜索框可匹配域名类型，无需勾选域名类型列
 6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 7 点击「生成创建命令」可基于当前过滤域名生成完整的 create gslb ... CLI 命令（支持复制与 TXT 下载）
 
@@ -153,7 +152,7 @@
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
 2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件
 3. 在字段配置区选择需要导出的字段，可排序
-4. 点击「预览」查看表格；点击某行选择域名，再点「查看关系图」或双击行查看引用拓扑
+4. 点击「预览」查看表格；点击表格中的任意行，下方关系图区域即实时展示该域名的「域名 → 地址池 → 服务成员」拓扑；重新查询或清除过滤后关系图自动清空
 4a. 可选：在搜索框输入关键字过滤域名，再点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
 5. 点击「导出 CSV」生成明细导出；点击「导出域名列表 CSV」按域名去重聚合导出
 6. 点击「导出域名列表 TXT」可导出空格分隔文本（无标题行）

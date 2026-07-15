@@ -2,10 +2,10 @@
  * GSLB JSON 导出 — 域名 / 地址池 / 服务成员 引用关系图（纯 SVG）
  *
  * 将 buildTopology 返回的 nodes/edges 做三列布局（域 | 池 | 成员），
- * 支持平移缩放、节点高亮、点击选中；不依赖外部图形库。
+ * 支持拖拽平移、按钮缩放（无滚轮缩放，避免误触）、节点高亮、点击选中；不依赖外部图形库。
  *
  * 依赖：由 app.js 传入 topology 数据
- * 导出：GslbGraph
+ * 导出：GslbGraph（render / resetView / zoomIn / zoomOut / filterTopology）
  */
 var GslbGraph = (function () {
   'use strict';
@@ -367,16 +367,28 @@ var GslbGraph = (function () {
       isPanning = false;
       if (wrap) wrap.classList.remove('panning');
     });
+    // 不用滚轮缩放：滚动页面时易误触；改由工具栏「放大 / 缩小」按钮控制
+  }
 
-    wrap.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      var delta = e.deltaY > 0 ? 0.9 : 1.1;
-      var next = panZoom.scale * delta;
-      if (next < 0.5) next = 0.5;
-      if (next > 2) next = 2;
-      panZoom.scale = next;
-      updateTransform();
-    }, { passive: false });
+  var ZOOM_STEP = 1.2;
+  var ZOOM_MIN = 0.5;
+  var ZOOM_MAX = 2;
+
+  /** 按倍率调整缩放，限制在 ZOOM_MIN～ZOOM_MAX */
+  function zoomBy(factor) {
+    var next = panZoom.scale * factor;
+    if (next < ZOOM_MIN) next = ZOOM_MIN;
+    if (next > ZOOM_MAX) next = ZOOM_MAX;
+    panZoom.scale = next;
+    updateTransform();
+  }
+
+  function zoomIn() {
+    zoomBy(ZOOM_STEP);
+  }
+
+  function zoomOut() {
+    zoomBy(1 / ZOOM_STEP);
   }
 
   function renderSvg(layout) {
@@ -515,13 +527,19 @@ var GslbGraph = (function () {
     applyHighlight();
   }
 
-  function render(topology, filterState, domainName) {
+  /**
+   * 渲染拓扑图。
+   * @param {object} topology     buildTopology 返回的拓扑数据
+   * @param {object} filterState  保留参数（暂未使用）
+   * @param {string} displayLabel 展示标签，由 app.js 拼接为 "name (type)" 传入
+   */
+  function render(topology, filterState, displayLabel) {
     currentTopology = topology;
     var wrap = document.getElementById('graph-svg-wrap');
     if (!wrap) return;
 
-    if (!topology || !domainName) {
-      wrap.innerHTML = '<div class="graph-empty">在表格中点击一行选择域名，再点击「查看关系图」或双击行查看该域名的引用关系</div>';
+    if (!topology || !displayLabel) {
+      wrap.innerHTML = '<div class="graph-empty">点击上方表格中的任意行，在此查看该域名的引用关系</div>';
       renderDetail(null);
       var badgeEmpty = document.getElementById('graph-badge');
       if (badgeEmpty) badgeEmpty.textContent = '—';
@@ -529,10 +547,10 @@ var GslbGraph = (function () {
     }
 
     if (!topology.domains.length) {
-      wrap.innerHTML = '<div class="graph-empty">域名「' + escText(domainName) + '」无地址池引用或数据不存在</div>';
+      wrap.innerHTML = '<div class="graph-empty">域名「' + escText(displayLabel) + '」无地址池引用或数据不存在</div>';
       renderDetail(null);
       var badgeNone = document.getElementById('graph-badge');
-      if (badgeNone) badgeNone.textContent = domainName + ' · 无引用';
+      if (badgeNone) badgeNone.textContent = displayLabel + ' · 无引用';
       return;
     }
 
@@ -544,7 +562,7 @@ var GslbGraph = (function () {
     var badge = document.getElementById('graph-badge');
     if (badge) {
       var nodeCount = topology.domains.length + topology.pools.length + topology.members.length;
-      badge.textContent = domainName + ' · ' + nodeCount + ' 节点 · ' + topology.edges.length + ' 条引用';
+      badge.textContent = displayLabel + ' · ' + nodeCount + ' 节点 · ' + topology.edges.length + ' 条引用';
     }
   }
 
@@ -556,6 +574,8 @@ var GslbGraph = (function () {
   return {
     render: render,
     resetView: resetView,
+    zoomIn: zoomIn,
+    zoomOut: zoomOut,
     filterTopology: filterTopology
   };
 })();

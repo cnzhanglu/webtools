@@ -180,33 +180,21 @@
   font-size: .82rem !important;
 }
 
-.view-tabs {
+/* 关系图分区标题栏（替代原 tab 切换） */
+.graph-section-header {
   display: flex;
-  gap: 4px;
-  margin-left: auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 2px solid #e2e8f0;
+  border-bottom: 1px solid #eaecf0;
+  background: #fafbff;
 }
 
-.view-tab {
-  padding: 6px 14px;
-  border: 1px solid #d0d7e3;
-  border-radius: 6px;
-  background: #fff;
-  color: #555;
-  font-size: .85rem;
+.graph-section-title {
+  font-size: .88rem;
   font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all .15s;
-}
-.view-tab:hover {
-  background: #eff6ff;
-  border-color: #2563a8;
-  color: #2563a8;
-}
-.view-tab.active {
-  background: #2563a8;
-  border-color: #2563a8;
-  color: #fff;
+  color: #334155;
 }
 
 .preview-scroll {
@@ -265,24 +253,15 @@
 }
 
 /* Graph view */
-.graph-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #eaecf0;
-  background: #fafbff;
-}
-
 .graph-layout {
   display: grid;
   grid-template-columns: 1fr 280px;
-  min-height: 480px;
+  min-height: 360px;
 }
 
 .graph-svg-wrap {
   overflow: auto;
-  min-height: 480px;
+  min-height: 360px;
   background: #f8fafc;
   cursor: grab;
   position: relative;
@@ -502,9 +481,5 @@
     border-left: none;
     border-top: 1px solid #eaecf0;
     max-height: 240px;
-  }
-  .view-tabs {
-    margin-left: 0;
-    width: 100%;
   }
 }
