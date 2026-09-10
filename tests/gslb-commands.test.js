@@ -381,8 +381,8 @@ module.exports = function (test, assert, assertEq) {
       {
         name: 'pool_a',
         gmember_list: [
-          { dc_name: 'dc_a', gmember_name: 'gm_shared', ip: '192.0.2.10' },
-          { dc_name: 'dc_b', gmember_name: 'gm_same_ip', ip: '192.0.2.10' }
+          { dc_name: 'dc_a', gmember_name: 'gm_shared', ip: '192.0.2.10', enable: 'no' },
+          { dc_name: 'dc_b', gmember_name: 'gm_same_ip', ip: '192.0.2.10', enable: 'yes' }
         ]
       },
       {
@@ -401,7 +401,7 @@ module.exports = function (test, assert, assertEq) {
       }
     ],
     data_center: [
-      { name: 'dc_c', gmembers: [{ gmember_name: 'gm_fallback', ip: '198.51.100.20' }] }
+      { name: 'dc_c', gmembers: [{ gmember_name: 'gm_fallback', ip: '198.51.100.20', enable: 'no' }] }
     ]
   };
 
@@ -462,6 +462,9 @@ module.exports = function (test, assert, assertEq) {
     assertEq(sameIp[0].memberName, 'gm_shared');
     assertEq(sameIp[1].dcName, 'dc_b');
     assertEq(sameIp[1].memberName, 'gm_same_ip');
+    assertEq(sameIp[0].poolStatus, 'disable');
+    assertEq(sameIp[1].poolStatus, 'enable');
+    assertEq(items.filter(function (it) { return it.id === 'dc_c*gm_fallback'; })[0].memberStatus, 'disable');
     assertEq(items.filter(function (it) { return it.id === 'dc_a*gm_shared'; }).length, 1);
   });
 

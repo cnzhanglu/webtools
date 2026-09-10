@@ -6,10 +6,11 @@
  *
  * 主要能力：
  *   collectAvailableFields — 扫描 JSON 中出现过的可导出字段
- *   buildAddRows — 按选定字段顺序展开为「域名×池×成员」扁平行
+ *   buildAddRows — 按选定字段顺序展开为「域名×池×成员」扁平行，并附加禁用元数据
  *   buildOrphanGpoolRows — 未被域名引用的地址池（池×成员）
  *   buildOrphanGmemberRows — 未被地址池引用的数据中心服务成员
  *   buildTopology — 构建域名-池-成员引用图（池按 gpool_list 顺序，成员按 seq）
+ *   filterRowsByColumns — 预览表逐列 AND 过滤
  *   buildCsvContent — 带 UTF-8 BOM 的 CSV 文本
  *
  * 依赖：GslbFields（字段名与中英文映射）
@@ -20,6 +21,33 @@ var GslbProcess = (function () {
 
   function isScalar(x) {
     return typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean' || x === null;
+  }
+
+  /**
+   * 统一判断 enable 是否明确表示禁用；缺失及未知值按启用处理。
+   * 除设备常见的 yes/no 外，兼容布尔值、0/1 与 disable 字样。
+   */
+  function isDisabledEnable(value) {
+    if (value === false || value === 0) return true;
+    if (typeof value !== 'string') return false;
+    var normalized = value.trim().toLowerCase();
+    return normalized === 'no' || normalized === '0' || normalized === 'false'
+      || normalized === 'disable' || normalized === 'disabled';
+  }
+
+  /** 合并禁用原因并去重，保证详情提示稳定且易读。 */
+  function mergeReasons(target, reasons) {
+    var out = target || [];
+    var i;
+    for (i = 0; i < (reasons || []).length; i++) {
+      if (reasons[i] && out.indexOf(reasons[i]) === -1) out.push(reasons[i]);
+    }
+    return out;
+  }
+
+  /** 池定义或域名侧池引用任一明确禁用，都视为该条池路径禁用。 */
+  function isPoolPathDisabled(gpRef, gpObj) {
+    return isDisabledEnable(gpRef && gpRef.enable) || isDisabledEnable(gpObj && gpObj.enable);
   }
 
   function normalizeHmsList(value) {
@@ -400,7 +428,7 @@ var GslbProcess = (function () {
 
   /**
    * 将 ADD 域名列表按「域名 × 地址池引用 × 池成员」笛卡尔展开为扁平行；
-   * 每行按 orders 中字段顺序填充，并附带 _domainName / _domainType 供过滤/关系图使用。
+   * 每行按 orders 中字段顺序填充，并附带不依赖可见列的域名键及禁用元数据。
    * name+type 共同构成唯一键（同名不同类型的域名视为独立记录）。
    */
   function buildAddRows(jsonData, orders, dcMemberIndex) {
@@ -442,9 +470,20 @@ var GslbProcess = (function () {
           fillPoolFields(row, orders, gpRef, gpObj);
           fillMemberFields(row, orders, gm, dcMemberIndex);
 
-          rows.push(row);
           row._domainName = dom.name || '';
           row._domainType = dom.type || '';
+          row._disabledReasons = [];
+          if (isDisabledEnable(dom.enable)) row._disabledReasons.push('域名 enable=no');
+          if (isPoolPathDisabled(gpRef, gpObj)) {
+            row._disabledReasons.push('地址池 enable=no');
+          }
+          if (gm && isDisabledEnable(gm.enable)) row._disabledReasons.push('地址池成员 enable=no');
+          if (gm) {
+            var dcMember = dcMemberIndex[(gm.dc_name || '') + '\0' + (gm.gmember_name || '')] || {};
+            if (isDisabledEnable(dcMember.enable)) row._disabledReasons.push('服务成员 enable=no');
+          }
+          row._disabled = row._disabledReasons.length > 0;
+          rows.push(row);
         }
       }
     }
@@ -616,11 +655,18 @@ var GslbProcess = (function () {
     // domainType 可为空字符串（对应无类型记录），null 表示不限制
     var onlyType = (domainType !== undefined && domainType !== null) ? String(domainType) : null;
 
-    function addEdge(from, to, kind, params) {
+    function addEdge(from, to, kind, params, disabled, disabledReasons) {
       edgeKey = from + '\0' + to + '\0' + kind;
       if (edgeSeen[edgeKey]) return;
       edgeSeen[edgeKey] = true;
-      edges.push({ from: from, to: to, kind: kind, params: params || {} });
+      edges.push({
+        from: from,
+        to: to,
+        kind: kind,
+        params: params || {},
+        disabled: !!disabled,
+        disabledReasons: (disabledReasons || []).slice()
+      });
     }
 
     for (r = 0; r < addList.length; r++) {
@@ -634,10 +680,13 @@ var GslbProcess = (function () {
       if (onlyType !== null && domType !== onlyType) continue;
       domKey = domName + '\0' + domType;
       if (!domainMap[domKey]) {
+        var domainDisabled = isDisabledEnable(dom.enable);
         domainMap[domKey] = {
           id: 'domain:' + domName + '\0' + domType,
           name: domName,
-          params: pickScalarParams(dom, { gpool_list: true, alias_list: true })
+          params: pickScalarParams(dom, { gpool_list: true, alias_list: true }),
+          disabled: domainDisabled,
+          disabledReasons: domainDisabled ? ['域名 enable=no'] : []
         };
       }
 
@@ -654,10 +703,14 @@ var GslbProcess = (function () {
         poolId = 'pool:' + gpName;
         if (!poolMap[poolId]) {
           gpObj = gpMap[gpName] || {};
+          var poolSelfDisabled = isDisabledEnable(gpObj.enable);
           poolMap[poolId] = {
             id: poolId,
             name: gpName,
-            params: pickScalarParams(gpObj, { gmember_list: true })
+            params: pickScalarParams(gpObj, { gmember_list: true }),
+            selfDisabled: poolSelfDisabled,
+            disabled: poolSelfDisabled,
+            disabledReasons: poolSelfDisabled ? ['地址池 enable=no'] : []
           };
           if (Array.isArray(gpObj.hms)) {
             poolMap[poolId].params.hms = normalizeHmsList(gpObj.hms);
@@ -666,9 +719,21 @@ var GslbProcess = (function () {
           poolOrder.push(poolId);
         }
 
-        addEdge('domain:' + domName + '\0' + domType, poolId, 'domain-pool', pickScalarParams(gpRef));
-
         gpObj = gpMap[gpName] || {};
+        var domainNode = domainMap[domKey];
+        var poolPathDisabled = isPoolPathDisabled(gpRef, gpObj);
+        var domainPoolReasons = [];
+        if (domainNode.disabled) domainPoolReasons.push('上游域名已禁用');
+        if (poolPathDisabled) domainPoolReasons.push('地址池 enable=no');
+        addEdge(
+          domainNode.id,
+          poolId,
+          'domain-pool',
+          pickScalarParams(gpRef),
+          domainNode.disabled || poolPathDisabled,
+          domainPoolReasons
+        );
+
         members = (gpObj && typeof gpObj === 'object') ? sortMembersBySeq(gpObj.gmember_list || []) : [];
         for (gmIdx = 0; gmIdx < members.length; gmIdx++) {
           gm = members[gmIdx];
@@ -680,10 +745,14 @@ var GslbProcess = (function () {
 
           if (!memberMap[memberId]) {
             dcGm = dcMemberIndex[dcName + '\0' + gmemberName] || {};
+            var memberSelfDisabled = isDisabledEnable(dcGm.enable);
             memberMap[memberId] = {
               id: memberId,
               label: gmemberName || gm.ip || '成员',
-              params: pickScalarParams(gm)
+              params: pickScalarParams(gm),
+              selfDisabled: memberSelfDisabled,
+              disabled: memberSelfDisabled,
+              disabledReasons: memberSelfDisabled ? ['服务成员 enable=no'] : []
             };
             if (gm.enable !== undefined) memberMap[memberId].params.pool_enable = gm.enable;
             if (Array.isArray(dcGm.hms)) {
@@ -695,11 +764,62 @@ var GslbProcess = (function () {
             memberOrder.push(memberId);
           }
 
+          var poolMemberDisabled = isDisabledEnable(gm.enable);
           addEdge(poolId, memberId, 'pool-member', {
             seq: gm.seq !== undefined && gm.seq !== null ? gm.seq : '',
             port: gm.port !== undefined && gm.port !== null ? gm.port : '',
             pool_enable: gm.enable !== undefined && gm.enable !== null ? gm.enable : ''
-          });
+          }, poolMemberDisabled, poolMemberDisabled ? ['地址池成员 enable=no'] : []);
+        }
+      }
+    }
+
+    /*
+     * 先由域名入边汇总池状态，再把池状态传播到成员连线。
+     * 共享 Server 只在自身禁用，或所有入站连线均禁用时灰化。
+     */
+    var edgeIdx, nodeId, inbound, edgeItem, sourcePool;
+    for (nodeId in poolMap) {
+      if (!Object.prototype.hasOwnProperty.call(poolMap, nodeId)) continue;
+      if (poolMap[nodeId].selfDisabled) continue;
+      inbound = [];
+      for (edgeIdx = 0; edgeIdx < edges.length; edgeIdx++) {
+        edgeItem = edges[edgeIdx];
+        if (edgeItem.kind === 'domain-pool' && edgeItem.to === nodeId) inbound.push(edgeItem);
+      }
+      if (inbound.length && inbound.every(function (item) { return item.disabled; })) {
+        poolMap[nodeId].disabled = true;
+        poolMap[nodeId].disabledReasons.push('所有入站路径均已禁用');
+        for (edgeIdx = 0; edgeIdx < inbound.length; edgeIdx++) {
+          mergeReasons(poolMap[nodeId].disabledReasons, inbound[edgeIdx].disabledReasons);
+        }
+      }
+    }
+
+    for (edgeIdx = 0; edgeIdx < edges.length; edgeIdx++) {
+      edgeItem = edges[edgeIdx];
+      if (edgeItem.kind !== 'pool-member') continue;
+      sourcePool = poolMap[edgeItem.from];
+      if (sourcePool && sourcePool.disabled) {
+        edgeItem.disabled = true;
+        mergeReasons(edgeItem.disabledReasons, ['上游地址池已禁用']);
+        mergeReasons(edgeItem.disabledReasons, sourcePool.disabledReasons);
+      }
+    }
+
+    for (nodeId in memberMap) {
+      if (!Object.prototype.hasOwnProperty.call(memberMap, nodeId)) continue;
+      if (memberMap[nodeId].selfDisabled) continue;
+      inbound = [];
+      for (edgeIdx = 0; edgeIdx < edges.length; edgeIdx++) {
+        edgeItem = edges[edgeIdx];
+        if (edgeItem.kind === 'pool-member' && edgeItem.to === nodeId) inbound.push(edgeItem);
+      }
+      if (inbound.length && inbound.every(function (item) { return item.disabled; })) {
+        memberMap[nodeId].disabled = true;
+        memberMap[nodeId].disabledReasons.push('所有入站路径均已禁用');
+        for (edgeIdx = 0; edgeIdx < inbound.length; edgeIdx++) {
+          mergeReasons(memberMap[nodeId].disabledReasons, inbound[edgeIdx].disabledReasons);
         }
       }
     }
@@ -711,10 +831,16 @@ var GslbProcess = (function () {
       if (Object.prototype.hasOwnProperty.call(domainMap, k)) domains.push(domainMap[k]);
     }
     for (k in poolMap) {
-      if (Object.prototype.hasOwnProperty.call(poolMap, k)) pools.push(poolMap[k]);
+      if (Object.prototype.hasOwnProperty.call(poolMap, k)) {
+        delete poolMap[k].selfDisabled;
+        pools.push(poolMap[k]);
+      }
     }
     for (k in memberMap) {
-      if (Object.prototype.hasOwnProperty.call(memberMap, k)) members.push(memberMap[k]);
+      if (Object.prototype.hasOwnProperty.call(memberMap, k)) {
+        delete memberMap[k].selfDisabled;
+        members.push(memberMap[k]);
+      }
     }
 
     domains.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
@@ -832,8 +958,48 @@ var GslbProcess = (function () {
     return rows;
   }
 
+  /**
+   * 按列条件过滤行。多个列条件同时生效（AND）。
+   * match 为 equals 时精确匹配（忽略大小写）；否则为包含匹配。
+   * 空条件忽略；单元格空值按空字符串比较。
+   */
+  function filterRowsByColumns(rows, columnFilters, match) {
+    var keys = [];
+    var k;
+    var q;
+    if (!rows || !columnFilters) return rows || [];
+    for (k in columnFilters) {
+      if (!Object.prototype.hasOwnProperty.call(columnFilters, k)) continue;
+      q = String(columnFilters[k] == null ? '' : columnFilters[k]).trim();
+      if (q) keys.push({ key: k, query: q.toLowerCase() });
+    }
+    if (!keys.length) return rows;
+
+    var exact = match === 'equals';
+    var out = [];
+    var r;
+    var i;
+    var val;
+    var text;
+    var ok;
+    for (r = 0; r < rows.length; r++) {
+      ok = true;
+      for (i = 0; i < keys.length; i++) {
+        val = rows[r][keys[i].key];
+        text = val === null || val === undefined ? '' : String(val).toLowerCase();
+        if (exact ? text !== keys[i].query : text.indexOf(keys[i].query) === -1) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) out.push(rows[r]);
+    }
+    return out;
+  }
+
   return {
     isScalar: isScalar,
+    isDisabledEnable: isDisabledEnable,
     normalizeHmsList: normalizeHmsList,
     buildDcMemberIndex: buildDcMemberIndex,
     getAddList: getAddList,
@@ -844,6 +1010,7 @@ var GslbProcess = (function () {
     buildOrphanGmemberRows: buildOrphanGmemberRows,
     buildDomainListRows: buildDomainListRows,
     buildTopology: buildTopology,
-    buildCsvContent: buildCsvContent
+    buildCsvContent: buildCsvContent,
+    filterRowsByColumns: filterRowsByColumns
   };
 })();

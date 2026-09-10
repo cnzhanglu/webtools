@@ -13,7 +13,7 @@
  *   → collectResourcesForDomains  (查 ADD、gpool、data_center 索引)
  *   → buildCreateCommands         (按顺序拼接命令行 + 收集 warnings)
  *   → { lines, warnings }
- *   当前域名成员启停：collectRrsMembers → buildRrsMemberPickerItems（按成员列出 IP/DC/VS）
+ *   当前域名成员启停：collectRrsMembers → buildRrsMemberPickerItems（按成员列出 IP/DC/VS/启停状态）
  *   → buildRrsMemberCommands（勾选/手工 IP 合并匹配，跨池按 dc*gmember_name 去重）
  */
 var GslbCommands = (function () {
@@ -465,7 +465,9 @@ var GslbCommands = (function () {
           ip: ip,
           rawIp: rawIp,
           dcName: dcName,
-          memberName: memberName
+          memberName: memberName,
+          enable: member.enable,
+          memberEnable: dcMember && dcMember.enable
         });
       }
     }
@@ -474,7 +476,7 @@ var GslbCommands = (function () {
   }
 
   /**
-   * 勾选列表按服务成员分行，不再按 IP 去重，便于同 IP 区分 DC / VS。
+   * 勾选列表按服务成员分行，不再按 IP 去重，便于同 IP 区分 DC / VS / 当前启停状态。
    * 无可用 IP 的成员无法按现有规则匹配，故不进入勾选项。
    */
   function buildRrsMemberPickerItems(members) {
@@ -488,7 +490,9 @@ var GslbCommands = (function () {
         ip: ip,
         dcName: m.dcName || '',
         memberName: m.memberName || '',
-        id: m.id || ''
+        id: m.id || '',
+        poolStatus: formatStatus(m.enable),
+        memberStatus: formatStatus(m.memberEnable)
       });
     }
     return items;

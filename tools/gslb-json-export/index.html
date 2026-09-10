@@ -37,6 +37,7 @@
       <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览</button>
       <button class="btn btn-success" id="btn-export" type="button">💾 导出 CSV</button>
       <button class="btn btn-outline" id="btn-help" type="button">📘 工具说明</button>
+      <span class="status-bar" id="status-text">状态：尚未加载 JSON</span>
     </div>
     <div class="op-bar-row op-bar-row-export">
       <button class="btn btn-outline" id="btn-export-domain-list" type="button">📋 导出域名列表 CSV</button>
@@ -46,17 +47,19 @@
     </div>
   </div>
 
-  <div class="status-bar" id="status-text">状态：尚未加载 JSON</div>
-
-  <div class="section-title">GSLB 配置字段选择及排序</div>
-  <div class="transfer-row">
-    <div id="transfer-domain"></div>
-    <div id="transfer-pool"></div>
-    <div id="transfer-member"></div>
-  </div>
-  <div class="reset-row">
-    <button class="btn btn-outline" id="btn-reset" type="button">↺ 恢复默认</button>
-  </div>
+  <details class="field-config">
+    <summary class="section-title">GSLB 配置字段选择及排序</summary>
+    <div class="field-config-body">
+      <div class="transfer-row">
+        <div id="transfer-domain"></div>
+        <div id="transfer-pool"></div>
+        <div id="transfer-member"></div>
+      </div>
+      <div class="reset-row">
+        <button class="btn btn-outline" id="btn-reset" type="button">↺ 恢复默认</button>
+      </div>
+    </div>
+  </details>
 
   <div class="panel preview-panel">
     <div class="panel-header">
@@ -64,19 +67,12 @@
       <span class="stat-badge" id="preview-badge">—</span>
     </div>
     <div class="preview-toolbar">
-      <input type="search" id="filter-query" class="filter-input" placeholder="搜索域名 / 地址池 / 成员 / 任意字段…" autocomplete="off">
-      <select id="filter-match" class="filter-select">
+      <select id="filter-match" class="filter-select" title="各列过滤框的匹配方式">
         <option value="contains">包含</option>
         <option value="equals">等于</option>
       </select>
-      <select id="filter-scope" class="filter-select">
-        <option value="all">全部字段</option>
-        <option value="domain">仅域名</option>
-        <option value="pool">仅地址池</option>
-        <option value="member">仅成员</option>
-      </select>
       <button class="btn btn-primary btn-sm" id="btn-filter-query" type="button">查询</button>
-      <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
+      <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除过滤</button>
       <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
       <button class="btn btn-outline btn-sm" id="btn-rrs-member" type="button" disabled title="请先在表格中点击一行选择域名">成员启停命令</button>
       <button class="btn btn-outline btn-sm" id="btn-gen-cmds" type="button" disabled title="请先导入 JSON 并点击「预览」">⚙ 生成创建命令</button>
@@ -91,25 +87,30 @@
         </table>
       </div>
     </div>
-    <div class="panel-body" id="view-graph">
-      <div class="graph-section-header">
-        <span class="graph-section-title">域名引用关系图</span>
-        <span class="stat-badge" id="graph-badge">—</span>
-        <button class="btn btn-outline btn-sm" id="btn-graph-zoom-out" type="button" title="缩小">− 缩小</button>
-        <button class="btn btn-outline btn-sm" id="btn-graph-zoom-in" type="button" title="放大">+ 放大</button>
-        <button class="btn btn-outline btn-sm" id="btn-graph-reset" type="button">重置视图</button>
+  </div>
+
+</div>
+
+<!-- 域名引用关系图：仅标题栏 × 关闭，不响应遮罩点击 -->
+<div class="modal-overlay" id="graph-overlay">
+  <div class="modal-box modal-box-graph">
+    <div class="modal-header graph-modal-header">
+      <span class="graph-section-title">域名引用关系图</span>
+      <span class="stat-badge" id="graph-badge">—</span>
+      <button class="btn btn-outline btn-sm" id="btn-graph-zoom-out" type="button" title="缩小">− 缩小</button>
+      <button class="btn btn-outline btn-sm" id="btn-graph-zoom-in" type="button" title="放大">+ 放大</button>
+      <button class="btn btn-outline btn-sm" id="btn-graph-reset" type="button">重置视图</button>
+      <button class="modal-close" id="btn-close-graph" type="button" aria-label="关闭" title="关闭">×</button>
+    </div>
+    <div class="graph-layout">
+      <div class="graph-svg-wrap" id="graph-svg-wrap">
+        <div class="graph-empty">双击表格行或点击「查看关系图」打开引用拓扑</div>
       </div>
-      <div class="graph-layout">
-        <div class="graph-svg-wrap" id="graph-svg-wrap">
-          <div class="graph-empty">点击上方表格中的任意行，在此查看该域名的「域名 → 地址池 → 服务成员」引用关系；重新查询后图自动清空</div>
-        </div>
-        <div class="graph-detail" id="graph-detail">
-          <div class="graph-detail-empty">点击节点查看完整参数</div>
-        </div>
+      <div class="graph-detail" id="graph-detail">
+        <div class="graph-detail-empty">点击节点查看完整参数</div>
       </div>
     </div>
   </div>
-
 </div>
 
 <!-- 当前域名的 RRS 成员启停弹窗 -->
@@ -120,7 +121,7 @@
       <div class="cmds-meta" id="rrs-member-meta"></div>
       <div class="rrs-member-form">
         <div>
-          <label class="rrs-member-label">当前域名成员（可多选，显示 IP / 数据中心 / VS）</label>
+          <label class="rrs-member-label">当前域名成员（可多选，显示 IP / 数据中心 / VS / 当前启停）</label>
           <div class="rrs-member-list" id="rrs-member-list"></div>
         </div>
         <div class="rrs-member-inputs">
@@ -176,19 +177,19 @@
 1 支持域名、地址池、成员字段自由选择与排序
 2 支持字段方案记忆（自动记忆最近配置，保存在浏览器本地）
 3 支持高级字段：HMS、Pass、池启用、DC启用等
-4 支持虚拟滚动预览大量数据；输入关键字后点击「查询」或按回车过滤，支持 Ctrl+C 复制选中行
-5 点击表格行选择域名，下方关系图实时展示「域名 → 地址池 → 服务成员」引用拓扑；关系图以「域名名称 + 类型」区分（同名 A/AAAA 互不干扰）；搜索框可匹配域名类型，无需勾选域名类型列
+4 支持虚拟滚动预览大量数据；表头每列可独立过滤（多列条件同时生效），单元格完整显示可直接选中复制；Ctrl+C 也可复制选中行
+5 单击表格行选择域名；双击行或点击「查看关系图」以弹窗查看「域名 → 地址池 → 服务成员」引用拓扑（同名 A/AAAA 互不干扰）；弹窗仅可通过右上角 × 关闭
 6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 7 点击「生成创建命令」可基于当前过滤域名生成完整的 create gslb ... CLI 命令（支持复制与 TXT 下载）
-8 选中表格中的一个域名后，可点击「成员启停命令」，勾选该域名成员（列表同时显示 IP、数据中心、VS 名称）或手工输入 IP，生成逐成员 ID 的 enable / disable 命令
+8 选中表格中的一个域名后，可点击「成员启停命令」，勾选该域名成员（列表同时显示 IP、数据中心、VS 名称和当前启停状态）或手工输入 IP，生成逐成员 ID 的 enable / disable 命令
 
 操作步骤：
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
 2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件
-3. 在字段配置区选择需要导出的字段，可排序
-4. 点击「预览」查看表格；点击表格中的任意行，下方关系图区域即实时展示该域名的「域名 → 地址池 → 服务成员」拓扑；重新查询或清除过滤后关系图自动清空
-4a. 可选：在搜索框输入关键字过滤域名，再点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
-4b. 可选：点击一行选中域名，再点「成员启停命令」；成员范围仅限当前域名。勾选列表按服务成员分行（同一 IP 的不同数据中心/VS 可区分），勾选与手工输入 IP 会合并匹配，仍按 IP 命中成员并按 DC*VS 去重生成命令；直接使用已导入的完整 JSON，无需再次粘贴设备返回
+3. 展开「GSLB 配置字段选择及排序」选择需要导出的字段，可排序（默认折叠）
+4. 点击「预览」查看表格；在表头过滤框按列筛选；单击行选择域名，双击行或点「查看关系图」打开拓扑弹窗（仅 × 关闭）
+4a. 可选：按列过滤后点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
+4b. 可选：点击一行选中域名，再点「成员启停命令」；成员范围仅限当前域名。勾选列表按服务成员分行（同一 IP 的不同数据中心/VS 可区分，并显示池成员与服务成员当前启停状态），勾选与手工输入 IP 会合并匹配，仍按 IP 命中成员并按 DC*VS 去重生成命令；直接使用已导入的完整 JSON，无需再次粘贴设备返回
 5. 点击「导出 CSV」生成明细导出；点击「导出域名列表 CSV」按域名去重聚合导出
 6. 点击「导出域名列表 TXT」可导出空格分隔文本（无标题行）
 7. 点击「导出未引用地址池 CSV」导出未被任何域名引用的地址池（列取自地址池/成员字段选择）

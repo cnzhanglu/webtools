@@ -51,14 +51,15 @@
   background: #fff;
 }
 
-.status-bar {
-  background: #fff;
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: .88rem;
-  color: #444;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+.op-bar .status-bar {
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: .85rem;
+  color: #64748b;
   user-select: text;
+  white-space: nowrap;
 }
 
 .section-title {
@@ -69,6 +70,41 @@
   padding: 6px 14px;
   border-radius: 6px 6px 0 0;
   margin-bottom: -1px;
+}
+
+/* 字段选择默认折叠，展开后才显示穿梭框。 */
+.field-config {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  overflow: hidden;
+}
+.field-config > summary.section-title {
+  list-style: none;
+  cursor: pointer;
+  margin-bottom: 0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+.field-config > summary.section-title::-webkit-details-marker {
+  display: none;
+}
+.field-config > summary.section-title::after {
+  content: '▸';
+  font-size: .85rem;
+  opacity: .9;
+}
+.field-config[open] > summary.section-title {
+  border-radius: 6px 6px 0 0;
+}
+.field-config[open] > summary.section-title::after {
+  content: '▾';
+}
+.field-config-body {
+  padding: 12px;
 }
 
 .transfer-row {
@@ -165,6 +201,24 @@
   border-color: #2563a8;
 }
 
+.col-filter-input {
+  width: 100%;
+  min-width: 80px;
+  box-sizing: border-box;
+  border: 1px solid #c7d6ea;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: .76rem;
+  font-family: inherit;
+  font-weight: 400;
+  color: #1a1a2e;
+  background: #fff;
+  outline: none;
+}
+.col-filter-input:focus {
+  border-color: #2563a8;
+}
+
 .filter-select {
   border: 1px solid #d0d7e3;
   border-radius: 6px;
@@ -192,24 +246,65 @@
 }
 
 .graph-section-title {
-  font-size: .88rem;
+  font-size: .92rem;
   font-weight: 600;
-  color: #334155;
+  color: inherit;
+}
+
+.graph-modal-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.graph-modal-header .stat-badge {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.35);
+  color: #fff;
+}
+.graph-modal-header .btn-outline {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255,255,255,.55);
+}
+.graph-modal-header .btn-outline:hover {
+  background: rgba(255,255,255,.14);
+}
+
+.modal-close {
+  margin-left: auto;
+  width: 36px;
+  height: 32px;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+.modal-close:hover {
+  background: rgba(255,255,255,.16);
 }
 
 .preview-scroll {
   overflow: auto;
-  max-height: 420px;
+  max-height: min(70vh, 720px);
 }
 
 #preview-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: .82rem;
 }
-#preview-table th {
+#preview-table thead {
   position: sticky;
   top: 0;
+  z-index: 3;
+}
+#preview-table th {
   background: #5B9BD5;
   color: #fff;
   font-weight: 600;
@@ -218,19 +313,42 @@
   white-space: nowrap;
   text-align: left;
 }
+#preview-table thead tr.filter-row th {
+  background: #e8f1fb;
+  padding: 6px 8px;
+  border-bottom: 1px solid #c7d6ea;
+  font-weight: 400;
+}
 #preview-table td {
   padding: 6px 12px;
   border-bottom: 1px solid #eaecf0;
   white-space: nowrap;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  user-select: text;
 }
 #preview-table tbody tr:hover {
   background: #f5f8ff;
 }
 #preview-table tbody tr.selected {
   background: #dbeafe;
+}
+
+/* 禁用行保留文字可读性，以浅红底和左侧色条提示，不使用删除线。 */
+#preview-table tbody tr.disabled-row td {
+  color: #9f1239;
+  background: #fff1f2;
+}
+#preview-table tbody tr.disabled-row td:first-child {
+  box-shadow: inset 4px 0 #dc2626;
+}
+#preview-table tbody tr.disabled-row:hover td,
+#preview-table tbody tr.disabled-row.selected td {
+  background: #ffe4e6;
+}
+#preview-table tbody tr.disabled-row.selected td {
+  box-shadow: inset 0 2px #2563a8, inset 0 -2px #2563a8;
+}
+#preview-table tbody tr.disabled-row.selected td:first-child {
+  box-shadow: inset 4px 0 #dc2626, inset 0 2px #2563a8, inset 0 -2px #2563a8;
 }
 
 #preview-table tr.virtual-spacer td {
@@ -260,13 +378,16 @@
 /* Graph view */
 .graph-layout {
   display: grid;
-  grid-template-columns: 1fr 280px;
-  min-height: 360px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  flex: 1;
+  min-height: 0;
 }
 
 .graph-svg-wrap {
-  overflow: auto;
-  min-height: 360px;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   background: #f8fafc;
   cursor: grab;
   position: relative;
@@ -277,7 +398,8 @@
 
 .graph-svg-wrap svg {
   display: block;
-  min-width: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .graph-empty {
@@ -300,6 +422,20 @@
   stroke-width: 3;
 }
 
+/* 禁用节点始终保留灰化与红色虚线语义，高亮/选中只增强线宽和阴影。 */
+.graph-node.disabled rect {
+  fill: #f1f5f9;
+  stroke: #dc2626;
+  stroke-dasharray: 7 5;
+}
+.graph-node.disabled text {
+  fill: #64748b;
+}
+.graph-node.disabled.highlight rect {
+  stroke: #dc2626;
+  filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.4));
+}
+
 .graph-node-title {
   font-size: 13px;
   font-weight: 700;
@@ -317,6 +453,15 @@
   stroke: #2563a8;
   stroke-width: 2.5;
 }
+.graph-edge.disabled path,
+.graph-edge.disabled.highlight path {
+  stroke: #dc2626;
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+}
+.graph-edge.disabled .graph-edge-label {
+  fill: #b91c1c;
+}
 
 .graph-edge-label {
   font-size: 10px;
@@ -328,7 +473,8 @@
   border-left: 1px solid #eaecf0;
   padding: 14px 16px;
   overflow-y: auto;
-  max-height: 520px;
+  min-width: 0;
+  min-height: 0;
   background: #fff;
 }
 
@@ -344,6 +490,30 @@
   color: #1a1a2e;
   margin-bottom: 12px;
   word-break: break-all;
+}
+
+.graph-detail-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.graph-detail-status.enabled {
+  color: #166534;
+  background: #dcfce7;
+}
+.graph-detail-status.disabled {
+  color: #991b1b;
+  background: #fee2e2;
+}
+.graph-detail-reason {
+  color: #b91c1c;
+  font-size: .8rem;
+  line-height: 1.55;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
 }
 
 .graph-detail-list {
@@ -377,6 +547,14 @@
 }
 .modal-overlay.visible {
   display: flex;
+}
+
+#graph-overlay {
+  overscroll-behavior: none;
+}
+
+body.graph-modal-open {
+  overflow: hidden;
 }
 
 .modal-box {
@@ -419,6 +597,14 @@
 .modal-box-wide {
   max-width: 920px;
   width: 95vw;
+}
+
+/* 关系图近全屏弹窗须覆盖 .modal-box 的宽度/高度限制 */
+.modal-box.modal-box-graph {
+  width: 96vw;
+  max-width: calc(100vw - 24px);
+  height: 92vh;
+  max-height: calc(100vh - 24px);
 }
 
 /* 创建命令弹窗 — 固定红色加粗免责声明 */
@@ -522,10 +708,35 @@
   gap: 1px;
   min-width: 0;
 }
+.rrs-member-option-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .rrs-member-option-ip {
   font-family: 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
   color: #1a1a2e;
   line-height: 1.35;
+}
+.rrs-member-status {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: .72rem;
+  line-height: 1.5;
+  font-weight: 700;
+}
+.rrs-member-status.is-enable {
+  color: #166534;
+  background: #dcfce7;
+}
+.rrs-member-status.is-disable {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+.rrs-member-option.is-disable {
+  background: #fff7f8;
 }
 .rrs-member-option-meta {
   font-size: .74rem;
@@ -574,11 +785,14 @@
   }
   .graph-layout {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+    overflow: auto;
   }
   .graph-detail {
     border-left: none;
     border-top: 1px solid #eaecf0;
-    max-height: 240px;
+    overflow-y: visible;
   }
   .rrs-member-form {
     grid-template-columns: 1fr;

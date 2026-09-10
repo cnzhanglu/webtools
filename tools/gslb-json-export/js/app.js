@@ -3,11 +3,12 @@
  *
  * 数据流：
  *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
- *   → 点击查询/回车过滤（始终匹配域名名称与类型）→ 点击表格行在下方实时渲染关系图 / CSV 导出（UTF-8 BOM）
+ *   → 点击查询/回车或表头列过滤（多列 AND）→ 单击表格行选中域名
+ *   → 双击行或「查看关系图」打开近全屏弹窗 / CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
  *   → 选中单个域名 → 勾选成员（显示 IP / DC / VS）或输入 IP → 生成逐 ID 的 RRS 成员启停命令
  *
- * 布局：表格始终可见，关系图固定显示在表格下方；重新查询/清除过滤时关系图自动清空
+ * 布局：表格始终可见；关系图仅在双击行或点击「查看关系图」时以弹窗打开，仅 × 关闭
  * 唯一键：域名名称 + 域名类型（name+type），与 commands.js 保持一致
  *
  * 模块分工：GslbFields（方案）、GslbTransfer（选列）、GslbProcess（行数据）、
@@ -26,8 +27,10 @@ var GslbApp = (function () {
   /** 当前选中的域名唯一键；name+type 共同确定一条域名记录 */
   var selectedDomainKey = { name: '', type: '' };
   var selectedRowIndices = {};
-  var filterState = { query: '', scope: 'all', match: 'contains' };
+  var filterState = { match: 'contains', columns: {} };
   var currentRrsMemberText = '';
+  var filterTimer = null;
+  var FILTER_DEBOUNCE_MS = 300;
 
   var groupDomain = null;
   var groupPool = null;
@@ -108,15 +111,12 @@ var GslbApp = (function () {
     });
 
     document.getElementById('btn-filter-query').addEventListener('click', onFilterQuery);
-    document.getElementById('filter-query').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        onFilterQuery();
-      }
-    });
+    document.getElementById('filter-match').addEventListener('change', onFilterQuery);
     document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
 
     document.getElementById('btn-view-graph').addEventListener('click', viewSelectedDomainGraph);
+    // 关系图仅允许标题栏 × 关闭，不绑定遮罩点击。
+    document.getElementById('btn-close-graph').addEventListener('click', hideGraphModal);
     document.getElementById('btn-graph-zoom-in').addEventListener('click', function () {
       GslbGraph.zoomIn();
     });
@@ -129,6 +129,8 @@ var GslbApp = (function () {
 
     document.addEventListener('keydown', function (e) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        var sel = window.getSelection();
+        if (sel && String(sel).length) return;
         var table = document.getElementById('preview-table');
         if (document.activeElement && table.contains(document.activeElement)) {
           copySelection();
@@ -171,40 +173,76 @@ var GslbApp = (function () {
       : '请先在表格中点击一行选择域名';
   }
 
-  /** 从输入框读取条件并执行过滤（点击查询或回车触发）；过滤后清空关系图与行选中 */
+  /** 从表头过滤框读取条件并执行过滤；过滤后清空选中与关系图弹窗 */
   function onFilterQuery() {
-    filterState.query = document.getElementById('filter-query').value;
-    filterState.match = document.getElementById('filter-match').value;
-    filterState.scope = document.getElementById('filter-scope').value;
+    syncFilterFromInputs();
     clearSelectionAndGraph();
     applyFilterAndRender();
+  }
+
+  function scheduleFilter() {
+    if (filterTimer) clearTimeout(filterTimer);
+    filterTimer = setTimeout(function () {
+      filterTimer = null;
+      onFilterQuery();
+    }, FILTER_DEBOUNCE_MS);
   }
 
   function clearFilter() {
-    filterState.query = '';
-    filterState.scope = 'all';
+    filterState.columns = {};
     filterState.match = 'contains';
-    document.getElementById('filter-query').value = '';
     document.getElementById('filter-match').value = 'contains';
-    document.getElementById('filter-scope').value = 'all';
+    var inputs = document.querySelectorAll('#preview-head .col-filter-input');
+    var i;
+    for (i = 0; i < inputs.length; i++) inputs[i].value = '';
     clearSelectionAndGraph();
     applyFilterAndRender();
   }
 
-  /** 清空行选中状态与关系图，重新查询时调用 */
+  /** 清空行选中状态并关闭关系图弹窗 */
   function clearSelectionAndGraph() {
     selectedDomainKey = { name: '', type: '' };
     selectedRowIndices = {};
     updateViewGraphButton();
     updateRrsMemberButton();
     resetRrsMemberModal();
-    GslbGraph.render(null, null, '');
+    hideGraphModal();
   }
 
   function syncFilterFromInputs() {
-    filterState.query = document.getElementById('filter-query').value;
     filterState.match = document.getElementById('filter-match').value;
-    filterState.scope = document.getElementById('filter-scope').value;
+    var inputs = document.querySelectorAll('#preview-head .col-filter-input');
+    var next = {};
+    var i;
+    var col;
+    for (i = 0; i < inputs.length; i++) {
+      col = inputs[i].getAttribute('data-col');
+      if (col) next[col] = inputs[i].value;
+    }
+    filterState.columns = next;
+  }
+
+  function hasActiveColumnFilters() {
+    var k;
+    for (k in filterState.columns) {
+      if (Object.prototype.hasOwnProperty.call(filterState.columns, k) &&
+          String(filterState.columns[k] || '').trim()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 列变更后只保留仍展示列上的过滤条件，避免隐藏列继续参与 AND。 */
+  function pruneColumnFilters(columns) {
+    var next = {};
+    var i;
+    var key;
+    for (i = 0; i < columns.length; i++) {
+      key = columns[i];
+      if (filterState.columns[key] !== undefined) next[key] = filterState.columns[key];
+    }
+    filterState.columns = next;
   }
 
   function bindVirtualScroll() {
@@ -244,69 +282,32 @@ var GslbApp = (function () {
     GslbGraph.render(topology, null, displayLabel);
   }
 
-  /** 点击「查看关系图」按钮时，直接在下方渲染（表格始终可见，无需切 tab） */
+  /** 单击只选中域名；双击或「查看关系图」才打开弹窗渲染 */
   function viewSelectedDomainGraph() {
     if (!selectedDomainKey.name) {
       alert('请先在表格中点击一行选择域名。');
       return;
     }
+    showGraphModal();
     renderDomainGraph(selectedDomainKey.name, selectedDomainKey.type);
   }
 
-  /**
-   * 按查询条件过滤行。
-   * @param {string} match  'contains'（包含，大小写不敏感）或 'equals'（精确等于，大小写不敏感）
-   *
-   * 当 scope 为 all 或 domain 时，始终先匹配行的 _domainName / _domainType 元数据，
-   * 不依赖「域名名称」或「域名类型」列是否已勾选。
-   */
-  function filterRows(rows, query, scope, columns, match) {
-    if (!query) return rows;
-    var q = query.toLowerCase();
-    var exactMatch = (match === 'equals');
-    var filtered = [];
-    var r, c, col, val, valStr;
+  function showGraphModal() {
+    document.body.classList.add('graph-modal-open');
+    document.getElementById('graph-overlay').classList.add('visible');
+  }
 
-    function hit(str) {
-      if (!str) return false;
-      var s = String(str).toLowerCase();
-      return exactMatch ? s === q : s.indexOf(q) !== -1;
-    }
-
-    for (r = 0; r < rows.length; r++) {
-      var row = rows[r];
-      var matched = false;
-
-      // 1. 先匹配域名元数据（不依赖勾选列）
-      if (scope === 'all' || scope === 'domain') {
-        matched = hit(row._domainName) || hit(row._domainType);
-      }
-
-      // 2. 再扫预览列
-      if (!matched) {
-        for (c = 0; c < columns.length; c++) {
-          col = columns[c];
-          if (scope === 'domain' && col.indexOf('domain.') !== 0) continue;
-          if (scope === 'pool' && col.indexOf('pool.') !== 0) continue;
-          if (scope === 'member' && col.indexOf('member.') !== 0) continue;
-          val = row[col];
-          if (val === null || val === undefined) continue;
-          valStr = String(val).toLowerCase();
-          if (exactMatch ? valStr === q : valStr.indexOf(q) !== -1) {
-            matched = true;
-            break;
-          }
-        }
-      }
-      if (matched) filtered.push(row);
-    }
-    return filtered;
+  function hideGraphModal() {
+    var overlay = document.getElementById('graph-overlay');
+    if (overlay) overlay.classList.remove('visible');
+    document.body.classList.remove('graph-modal-open');
+    GslbGraph.render(null, null, '');
   }
 
   function updatePreviewBadge(shown, total) {
     var badge = document.getElementById('preview-badge');
     if (!badge) return;
-    if (filterState.query && shown !== total) {
+    if (hasActiveColumnFilters() && shown !== total) {
       badge.textContent = '显示 ' + shown + ' / 共 ' + total + ' 行';
     } else {
       badge.textContent = '共 ' + total + ' 行';
@@ -317,6 +318,12 @@ var GslbApp = (function () {
     var tr = document.createElement('tr');
     var domainName = row._domainName || row['domain.name'] || '';
     var domainType = row._domainType !== undefined ? row._domainType : (row['domain.type'] || '');
+    if (row._disabled) {
+      var disabledReason = (row._disabledReasons || []).join('；');
+      tr.classList.add('disabled-row');
+      tr.title = '禁用：' + disabledReason;
+      tr.setAttribute('data-disabled-reason', disabledReason);
+    }
     if (domainName) {
       tr.setAttribute('data-domain', domainName);
       tr.setAttribute('data-domain-type', domainType);
@@ -330,7 +337,9 @@ var GslbApp = (function () {
       var td = document.createElement('td');
       var val = row[columns[c]];
       td.textContent = val === null || val === undefined ? '' : String(val);
-      td.title = td.textContent;
+      td.title = row._disabled
+        ? '禁用：' + disabledReason + (td.textContent ? '\n' + td.textContent : '')
+        : td.textContent;
       tr.appendChild(td);
     }
     return tr;
@@ -397,23 +406,12 @@ var GslbApp = (function () {
     restoreRowSelection();
   }
 
-  function renderPreviewTable() {
-    var columns = previewColumns;
-    var rows = displayRows;
+  function rebuildPreviewHead(columns) {
     var thead = document.getElementById('preview-head');
-    var tbody = document.getElementById('preview-body');
     var trHead;
     var i;
-
     thead.innerHTML = '';
-    tbody.innerHTML = '';
-
-    if (!columns.length) {
-      tbody.innerHTML = '<tr><td><span class="empty-hint">未选择任何字段</span></td></tr>';
-      updatePreviewBadge(0, previewRows.length);
-      return;
-    }
-
+    if (!columns.length) return;
     trHead = document.createElement('tr');
     for (i = 0; i < columns.length; i++) {
       var th = document.createElement('th');
@@ -421,6 +419,25 @@ var GslbApp = (function () {
       trHead.appendChild(th);
     }
     thead.appendChild(trHead);
+    thead.appendChild(buildFilterRow(columns));
+  }
+
+  function renderPreviewTable() {
+    var columns = previewColumns;
+    var rows = displayRows;
+    var thead = document.getElementById('preview-head');
+    var tbody = document.getElementById('preview-body');
+
+    tbody.innerHTML = '';
+
+    if (!columns.length) {
+      thead.innerHTML = '';
+      tbody.innerHTML = '<tr><td><span class="empty-hint">未选择任何字段</span></td></tr>';
+      updatePreviewBadge(0, previewRows.length);
+      return;
+    }
+
+    if (!thead.querySelector('.filter-row')) rebuildPreviewHead(columns);
 
     if (!rows.length) {
       var emptyTr = document.createElement('tr');
@@ -466,8 +483,36 @@ var GslbApp = (function () {
     var i;
     for (i = 0; i < rows.length; i++) rows[i].classList.remove('selected');
     tr.classList.add('selected');
+  }
 
-    renderDomainGraph(selectedDomainKey.name, selectedDomainKey.type);
+  function buildFilterRow(columns) {
+    var tr = document.createElement('tr');
+    var i;
+    tr.className = 'filter-row';
+    for (i = 0; i < columns.length; i++) {
+      var th = document.createElement('th');
+      var input = document.createElement('input');
+      input.type = 'search';
+      input.className = 'col-filter-input';
+      input.setAttribute('data-col', columns[i]);
+      input.value = filterState.columns[columns[i]] || '';
+      input.placeholder = '过滤';
+      input.setAttribute('aria-label', GslbFields.keyToCn(columns[i]) + ' 列过滤');
+      input.addEventListener('input', scheduleFilter);
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (filterTimer) {
+            clearTimeout(filterTimer);
+            filterTimer = null;
+          }
+          onFilterQuery();
+        }
+      });
+      th.appendChild(input);
+      tr.appendChild(th);
+    }
+    return tr;
   }
 
   function applyFilterAndRender() {
@@ -481,7 +526,7 @@ var GslbApp = (function () {
       renderPreviewTable();
       return;
     }
-    displayRows = filterRows(previewRows, filterState.query, filterState.scope, previewColumns, filterState.match);
+    displayRows = GslbProcess.filterRowsByColumns(previewRows, filterState.columns, filterState.match);
     resetPreviewScroll();
     renderPreviewTable();
   }
@@ -509,7 +554,7 @@ var GslbApp = (function () {
       updateRrsMemberButton();
       resetRrsMemberModal();
       updateGenCmdsButton();
-      GslbGraph.render(null, null, '');
+      hideGraphModal();
       setStatus('状态：已加载文件 ' + file.name);
       refreshFieldLists();
     };
@@ -627,10 +672,12 @@ var GslbApp = (function () {
     updateRrsMemberButton();
     resetRrsMemberModal();
     updateGenCmdsButton();
+    hideGraphModal();
+    pruneColumnFilters(columns);
+    rebuildPreviewHead(columns);
 
     syncFilterFromInputs();
     applyFilterAndRender();
-    GslbGraph.render(null, null, '');
   }
 
   function copySelection() {
@@ -852,9 +899,8 @@ var GslbApp = (function () {
     var meta = document.getElementById('cmds-meta');
     var domainCount = domainKeys.length;
     var cmdCount = lines.filter(function (l) { return l.indexOf('create ') === 0; }).length;
-    var matchLabel = filterState.match === 'equals' ? '等于' : '包含';
     meta.textContent = '共 ' + domainCount + ' 条域名记录，生成 ' + cmdCount + ' 条命令'
-      + (filterState.query ? '（过滤：' + matchLabel + ' "' + filterState.query + '"）' : '（全部预览域名）');
+      + (hasActiveColumnFilters() ? '（已按列过滤）' : '（全部预览域名）');
 
     // 命令文本
     document.getElementById('cmds-pre').textContent = currentCmdsText;
@@ -902,15 +948,18 @@ var GslbApp = (function () {
     var collected = GslbCommands.collectRrsMembers(jsonData, selectedDomainKey, dcMemberIndex);
     var list = document.getElementById('rrs-member-list');
     var items = GslbCommands.buildRrsMemberPickerItems(collected.members);
-    var i, item, label, checkbox, textWrap, ipEl, metaEl, dcText, vsText;
+    var i, item, label, checkbox, textWrap, headEl, ipEl, statusEl, metaEl, dcText, vsText, poolText, memberText;
 
     for (i = 0; i < items.length; i++) {
       item = items[i];
       dcText = item.dcName || '—';
       vsText = item.memberName || '—';
+      poolText = item.poolStatus === 'disable' ? '禁用' : '启用';
+      memberText = item.memberStatus === 'disable' ? '禁用' : '启用';
       label = document.createElement('label');
-      label.className = 'rrs-member-option';
-      label.title = item.ip + '　DC：' + dcText + '　VS：' + vsText;
+      label.className = 'rrs-member-option' + (item.poolStatus === 'disable' ? ' is-disable' : '');
+      label.title = item.ip + '　DC：' + dcText + '　VS：' + vsText
+        + '　池成员：' + poolText + '　服务成员：' + memberText;
       checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.value = item.ip;
@@ -920,10 +969,17 @@ var GslbApp = (function () {
       ipEl = document.createElement('span');
       ipEl.className = 'rrs-member-option-ip';
       ipEl.textContent = item.ip;
+      statusEl = document.createElement('span');
+      statusEl.className = 'rrs-member-status ' + (item.poolStatus === 'disable' ? 'is-disable' : 'is-enable');
+      statusEl.textContent = poolText;
+      headEl = document.createElement('span');
+      headEl.className = 'rrs-member-option-head';
+      headEl.appendChild(ipEl);
+      headEl.appendChild(statusEl);
       metaEl = document.createElement('span');
       metaEl.className = 'rrs-member-option-meta';
-      metaEl.textContent = 'DC：' + dcText + '　VS：' + vsText;
-      textWrap.appendChild(ipEl);
+      metaEl.textContent = 'DC：' + dcText + '　VS：' + vsText + '　服务成员：' + memberText;
+      textWrap.appendChild(headEl);
       textWrap.appendChild(metaEl);
       label.appendChild(checkbox);
       label.appendChild(textWrap);
@@ -1006,7 +1062,7 @@ var GslbApp = (function () {
           updateViewGraphButton();
           updateRrsMemberButton();
           resetRrsMemberModal();
-          GslbGraph.render(null, null, '');
+          hideGraphModal();
         }
         return;
       }
