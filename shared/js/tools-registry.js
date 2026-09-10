@@ -72,8 +72,8 @@ var BocToolRegistry = {
     {
       id: 'gslb-json-export',
       name: 'GSLB JSON 导出',
-      description: '解析 GSLB 配置 JSON（域名、地址池、成员），按方案选择字段并排序，全量预览与过滤，点击域名查看引用关系图，导出带中文表头的 CSV（UTF-8 BOM）。',
-      tags: ['GSLB', 'JSON', 'CSV', '关系图'],
+      description: '解析 GSLB 配置 JSON（域名、地址池、成员），支持预览过滤、关系图、CSV 导出，并可按当前域名生成成员隔离/恢复命令。',
+      tags: ['GSLB', 'JSON', 'CSV', '关系图', '隔离恢复'],
       path: 'tools/gslb-json-export/index.html',
       status: 'ready',
     },

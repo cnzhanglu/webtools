@@ -4,7 +4,8 @@
  * GslbCommands 单元测试
  *
  * 覆盖：算法映射、布尔格式化、资源收集、命令顺序与去重、多池 ratio 串、
- *       name+type 双记录独立、未知算法 warning、pass 字符串映射
+ *       name+type 双记录独立、未知算法 warning、pass 字符串映射，以及
+ *       当前域名 RRS 成员 IP 匹配、跨池 ID 去重、勾选列表按成员保留 DC/VS、启停命令与 zone 推导
  */
 module.exports = function (test, assert, assertEq) {
 
@@ -355,5 +356,127 @@ module.exports = function (test, assert, assertEq) {
     var result = GslbCommands.buildCommandsForDomains(FIXTURE, [], {});
     assert(result.warnings.length > 0, '无域名应有 warning');
     assertEq(result.lines.length, 0, '无域名应无命令行');
+  });
+
+  // ─── 当前域名 RRS 成员启停 ──────────────────────────────────────────────────
+
+  var RRS_MEMBER_FIXTURE = {
+    ADD: {
+      'prod.example': [
+        {
+          name: 'app.example.com.',
+          type: 'A',
+          gpool_list: [{ gpool_name: 'pool_a' }, { gpool_name: 'pool_b' }]
+        }
+      ],
+      'v6.example': [
+        {
+          name: 'app.example.com.',
+          type: 'AAAA',
+          gpool_list: [{ gpool_name: 'pool_v6' }]
+        }
+      ]
+    },
+    gpool: [
+      {
+        name: 'pool_a',
+        gmember_list: [
+          { dc_name: 'dc_a', gmember_name: 'gm_shared', ip: '192.0.2.10' },
+          { dc_name: 'dc_b', gmember_name: 'gm_same_ip', ip: '192.0.2.10' }
+        ]
+      },
+      {
+        name: 'pool_b',
+        gmember_list: [
+          { dc_name: 'dc_a', gmember_name: 'gm_shared', ip: '192.0.2.10' },
+          { dc_name: 'dc_c', gmember_name: 'gm_fallback' },
+          { dc_name: '', gmember_name: 'gm_no_id', ip: '192.0.2.99' }
+        ]
+      },
+      {
+        name: 'pool_v6',
+        gmember_list: [
+          { dc_name: 'dc_v6', gmember_name: 'gm_v6', ip: '2001:db8::1' }
+        ]
+      }
+    ],
+    data_center: [
+      { name: 'dc_c', gmembers: [{ gmember_name: 'gm_fallback', ip: '198.51.100.20' }] }
+    ]
+  };
+
+  test('RRS 成员：跨池重复 ID 去重，勾选与手工 IP 取并集', function () {
+    var result = GslbCommands.buildRrsMemberCommands(
+      RRS_MEMBER_FIXTURE,
+      { name: 'app.example.com.', type: 'A' },
+      ['192.0.2.10'],
+      '198.51.100.20',
+      'disable',
+      GslbProcess.buildDcMemberIndex(RRS_MEMBER_FIXTURE)
+    );
+    assertEq(result.lines.length, 3);
+    assertEq(result.lines[0], 'modify gslb rrs-member zone-name prod.example record-name app.example.com. type a pool-member id dc_a*gm_shared status disable force');
+    assert(result.lines[1].indexOf('pool-member id dc_b*gm_same_ip') !== -1);
+    assert(result.lines[2].indexOf('pool-member id dc_c*gm_fallback') !== -1);
+  });
+
+  test('RRS 成员：enable 与 IPv6 规范化匹配', function () {
+    var result = GslbCommands.buildRrsMemberCommands(
+      RRS_MEMBER_FIXTURE,
+      { name: 'app.example.com.', type: 'AAAA' },
+      [],
+      '2001:0db8:0:0:0:0:0:1',
+      'enable',
+      {}
+    );
+    assertEq(result.lines.length, 1);
+    assertEq(result.lines[0], 'modify gslb rrs-member zone-name v6.example record-name app.example.com. type aaaa pool-member id dc_v6*gm_v6 status enable force');
+  });
+
+  test('RRS 成员：ADD 数组格式的 zone 回退为 @', function () {
+    var data = {
+      ADD: [{ name: 'array.example.', type: 'A', gpool_list: [{ gpool_name: 'p' }] }],
+      gpool: [{ name: 'p', gmember_list: [{ dc_name: 'dc', gmember_name: 'gm', ip: '203.0.113.8' }] }]
+    };
+    var result = GslbCommands.buildRrsMemberCommands(
+      data,
+      { name: 'array.example.', type: 'A' },
+      ['203.0.113.8'],
+      '',
+      'disable',
+      {}
+    );
+    assert(result.lines[0].indexOf('zone-name @') !== -1);
+  });
+
+  test('RRS 成员：勾选列表按成员分行，同 IP 保留各自 DC 与 VS', function () {
+    var collected = GslbCommands.collectRrsMembers(
+      RRS_MEMBER_FIXTURE,
+      { name: 'app.example.com.', type: 'A' },
+      GslbProcess.buildDcMemberIndex(RRS_MEMBER_FIXTURE)
+    );
+    var items = GslbCommands.buildRrsMemberPickerItems(collected.members);
+    var sameIp = items.filter(function (it) { return it.ip === '192.0.2.10'; });
+    assertEq(sameIp.length, 2);
+    assertEq(sameIp[0].dcName, 'dc_a');
+    assertEq(sameIp[0].memberName, 'gm_shared');
+    assertEq(sameIp[1].dcName, 'dc_b');
+    assertEq(sameIp[1].memberName, 'gm_same_ip');
+    assertEq(items.filter(function (it) { return it.id === 'dc_a*gm_shared'; }).length, 1);
+  });
+
+  test('RRS 成员：未命中、非法 IP 与缺少 ID 返回中文警告', function () {
+    var result = GslbCommands.buildRrsMemberCommands(
+      RRS_MEMBER_FIXTURE,
+      { name: 'app.example.com.', type: 'A' },
+      ['192.0.2.99'],
+      'not-an-ip,203.0.113.254',
+      'disable',
+      {}
+    );
+    assertEq(result.lines.length, 0);
+    assert(result.warnings.some(function (w) { return w.indexOf('无法解析') !== -1; }));
+    assert(result.warnings.some(function (w) { return w.indexOf('未在当前域名成员中找到') !== -1; }));
+    assert(result.warnings.some(function (w) { return w.indexOf('无法构造 ID') !== -1; }));
   });
 };
