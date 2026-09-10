@@ -2,7 +2,8 @@
  * GSLB JSON 导出 — 域名 / 地址池 / 服务成员 引用关系图（纯 SVG）
  *
  * 将 buildTopology 返回的 nodes/edges 做三列布局（域 | 池 | 成员），
- * 支持拖拽平移、按钮缩放（无滚轮缩放，避免误触）、节点高亮、点击选中；不依赖外部图形库。
+ * 支持禁用节点/路径、拖拽平移、按钮缩放（滚轮不缩放、也不滚动背后页面）、
+ * 画布铺满弹窗可用区域；节点高亮与点击选中；不依赖外部图形库。
  *
  * 依赖：由 app.js 传入 topology 数据
  * 导出：GslbGraph（render / resetView / zoomIn / zoomOut / filterTopology）
@@ -56,6 +57,7 @@ var GslbGraph = (function () {
   var highlightedIds = null;
   var selectedId = null;
   var bound = false;
+  var lastLayout = null;
 
   function escText(s) {
     if (s === null || s === undefined) return '';
@@ -209,6 +211,8 @@ var GslbGraph = (function () {
           type: cols[c].type,
           name: item.name || item.label || '',
           params: item.params || {},
+          disabled: !!item.disabled,
+          disabledReasons: (item.disabledReasons || []).slice(),
           x: x,
           y: y,
           w: NODE_W,
@@ -228,6 +232,8 @@ var GslbGraph = (function () {
           to: e.to,
           kind: e.kind,
           params: e.params || {},
+          disabled: !!e.disabled,
+          disabledReasons: (e.disabledReasons || []).slice(),
           fromNode: nodeIndex[e.from],
           toNode: nodeIndex[e.to]
         });
@@ -284,7 +290,14 @@ var GslbGraph = (function () {
     }
 
     var typeName = node.type === 'domain' ? '域名' : (node.type === 'pool' ? '地址池' : '服务成员');
-    var html = '<div class="graph-detail-title">' + escText(typeName) + '：' + escText(node.name) + '</div><dl class="graph-detail-list">';
+    var html = '<div class="graph-detail-title">' + escText(typeName) + '：' + escText(node.name) + '</div>';
+    if (node.disabled) {
+      html += '<div class="graph-detail-status disabled">禁用</div>'
+        + '<div class="graph-detail-reason">' + escText((node.disabledReasons || []).join('；')) + '</div>';
+    } else {
+      html += '<div class="graph-detail-status enabled">启用</div>';
+    }
+    html += '<dl class="graph-detail-list">';
     var k, v;
     for (k in node.params) {
       if (!Object.prototype.hasOwnProperty.call(node.params, k)) continue;
@@ -335,6 +348,36 @@ var GslbGraph = (function () {
     }
   }
 
+  function wrapSize() {
+    var wrap = document.getElementById('graph-svg-wrap');
+    return {
+      w: wrap ? wrap.clientWidth : 0,
+      h: wrap ? wrap.clientHeight : 0
+    };
+  }
+
+  /** SVG 画布与容器同尺寸，平移/缩放才不会被内容包围盒裁切。 */
+  function sizeSvgToWrap(svg) {
+    var size = wrapSize();
+    var w = Math.max(size.w, 1);
+    var h = Math.max(size.h, 1);
+    svg.setAttribute('width', String(w));
+    svg.setAttribute('height', String(h));
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  }
+
+  /** 将拓扑居中放到可视区；超出部分靠拖拽查看。 */
+  function centerGraph(layout) {
+    var size = wrapSize();
+    if (!layout || !size.w || !size.h) {
+      panZoom.x = 0;
+      panZoom.y = 0;
+      return;
+    }
+    panZoom.x = Math.round((size.w - layout.width * panZoom.scale) / 2);
+    panZoom.y = Math.round((size.h - layout.height * panZoom.scale) / 2);
+  }
+
   function updateTransform() {
     var g = document.getElementById('graph-root');
     if (g) {
@@ -347,6 +390,7 @@ var GslbGraph = (function () {
     bound = true;
 
     var wrap = document.getElementById('graph-svg-wrap');
+    var overlay = document.getElementById('graph-overlay');
     if (!wrap) return;
 
     wrap.addEventListener('mousedown', function (e) {
@@ -367,18 +411,38 @@ var GslbGraph = (function () {
       isPanning = false;
       if (wrap) wrap.classList.remove('panning');
     });
-    // 不用滚轮缩放：滚动页面时易误触；改由工具栏「放大 / 缩小」按钮控制
+
+    // 绘图区吞掉滚轮，避免背后预览表跟着滚；右侧详情仍可滚动。
+    if (overlay) {
+      overlay.addEventListener('wheel', function (e) {
+        if (e.target.closest && e.target.closest('.graph-detail')) return;
+        e.preventDefault();
+      }, { passive: false });
+    }
+
+    window.addEventListener('resize', function () {
+      var svg = document.getElementById('graph-svg');
+      if (!svg || !lastLayout) return;
+      if (overlay && !overlay.classList.contains('visible')) return;
+      sizeSvgToWrap(svg);
+    });
   }
 
   var ZOOM_STEP = 1.2;
   var ZOOM_MIN = 0.5;
   var ZOOM_MAX = 2;
 
-  /** 按倍率调整缩放，限制在 ZOOM_MIN～ZOOM_MAX */
+  /** 以可视区中心为锚点缩放，限制在 ZOOM_MIN～ZOOM_MAX */
   function zoomBy(factor) {
-    var next = panZoom.scale * factor;
+    var prev = panZoom.scale;
+    var next = prev * factor;
     if (next < ZOOM_MIN) next = ZOOM_MIN;
     if (next > ZOOM_MAX) next = ZOOM_MAX;
+    var size = wrapSize();
+    var cx = size.w / 2;
+    var cy = size.h / 2;
+    panZoom.x = cx - (cx - panZoom.x) * (next / prev);
+    panZoom.y = cy - (cy - panZoom.y) * (next / prev);
     panZoom.scale = next;
     updateTransform();
   }
@@ -395,6 +459,7 @@ var GslbGraph = (function () {
     var wrap = document.getElementById('graph-svg-wrap');
     if (!wrap) return;
 
+    lastLayout = layout;
     layoutNodes = layout.nodes;
     layoutEdges = layout.edges;
 
@@ -407,9 +472,7 @@ var GslbGraph = (function () {
     var svgNs = 'http://www.w3.org/2000/svg';
     var svg = document.createElementNS(svgNs, 'svg');
     svg.id = 'graph-svg';
-    svg.setAttribute('width', layout.width);
-    svg.setAttribute('height', layout.height);
-    svg.setAttribute('viewBox', '0 0 ' + layout.width + ' ' + layout.height);
+    sizeSvgToWrap(svg);
 
     var root = document.createElementNS(svgNs, 'g');
     root.id = 'graph-root';
@@ -424,9 +487,14 @@ var GslbGraph = (function () {
     for (i = 0; i < layout.edges.length; i++) {
       edge = layout.edges[i];
       g = document.createElementNS(svgNs, 'g');
-      g.setAttribute('class', 'graph-edge');
+      g.setAttribute('class', edge.disabled ? 'graph-edge disabled' : 'graph-edge');
       g.setAttribute('data-from', edge.from);
       g.setAttribute('data-to', edge.to);
+      if (edge.disabledReasons.length) {
+        var edgeTitle = document.createElementNS(svgNs, 'title');
+        edgeTitle.textContent = '禁用：' + edge.disabledReasons.join('；');
+        g.appendChild(edgeTitle);
+      }
 
       path = document.createElementNS(svgNs, 'path');
       path.setAttribute('d', buildEdgePath(edge.fromNode, edge.toNode));
@@ -456,9 +524,15 @@ var GslbGraph = (function () {
       var colors = COLORS[node.type] || COLORS.member;
 
       g = document.createElementNS(svgNs, 'g');
-      g.setAttribute('class', 'graph-node');
+      g.setAttribute('class', node.disabled ? 'graph-node disabled' : 'graph-node');
       g.setAttribute('data-id', node.id);
       g.setAttribute('transform', 'translate(' + node.x + ',' + node.y + ')');
+
+      var nodeTitle = document.createElementNS(svgNs, 'title');
+      nodeTitle.textContent = node.disabled
+        ? node.name + '（禁用：' + node.disabledReasons.join('；') + '）'
+        : node.name + '（启用）';
+      g.appendChild(nodeTitle);
 
       rect = document.createElementNS(svgNs, 'rect');
       rect.setAttribute('width', node.w);
@@ -523,8 +597,19 @@ var GslbGraph = (function () {
     wrap.innerHTML = '';
     wrap.appendChild(svg);
     bindPanZoom();
+    panZoom.scale = 1;
+    centerGraph(layout);
     updateTransform();
     applyHighlight();
+    if (!wrap.clientWidth) {
+      requestAnimationFrame(function () {
+        var live = document.getElementById('graph-svg');
+        if (!live || !lastLayout) return;
+        sizeSvgToWrap(live);
+        centerGraph(lastLayout);
+        updateTransform();
+      });
+    }
   }
 
   /**
@@ -539,7 +624,8 @@ var GslbGraph = (function () {
     if (!wrap) return;
 
     if (!topology || !displayLabel) {
-      wrap.innerHTML = '<div class="graph-empty">点击上方表格中的任意行，在此查看该域名的引用关系</div>';
+      lastLayout = null;
+      wrap.innerHTML = '<div class="graph-empty">双击表格行或点击「查看关系图」打开引用拓扑</div>';
       renderDetail(null);
       var badgeEmpty = document.getElementById('graph-badge');
       if (badgeEmpty) badgeEmpty.textContent = '—';
@@ -554,8 +640,6 @@ var GslbGraph = (function () {
       return;
     }
 
-    panZoom = { x: 0, y: 0, scale: 1 };
-    resetView();
     var layout = computeLayout(topology);
     renderSvg(layout);
 
@@ -567,7 +651,8 @@ var GslbGraph = (function () {
   }
 
   function resetView() {
-    panZoom = { x: 0, y: 0, scale: 1 };
+    panZoom.scale = 1;
+    centerGraph(lastLayout);
     updateTransform();
   }
 
