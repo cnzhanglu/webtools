@@ -2,9 +2,10 @@
  * GSLB JSON 导出 — 创建命令生成层
  *
  * 根据搜索过滤后的域名记录（name + type），收集其依赖的 datacenter、service-member、
- * pool、pool-member，按依赖顺序生成 `create gslb ...` CLI 命令文本。
+ * pool、pool-member，按依赖顺序生成 `create gslb ...` CLI 命令文本；也可针对当前
+ * 选中的单个域名，按成员 IP 生成逐 ID 的 RRS 成员启停命令。
  *
- * 依赖：GslbProcess（需在此脚本之前加载，提供 buildDcMemberIndex、buildGpoolMap、getAddList）
+ * 依赖：GslbProcess（提供索引）、BocIpCidr（统一 IPv4/IPv6 文本）
  * 导出：GslbCommands
  *
  * 数据流：
@@ -368,6 +369,189 @@ var GslbCommands = (function () {
     return buildCreateCommands(res);
   }
 
+  // ─── RRS 成员启停 ──────────────────────────────────────────────────────────
+
+  function trim(value) {
+    return String(value == null ? '' : value).trim();
+  }
+
+  /** 统一 IPv4/IPv6 文本；解析失败返回空串，避免原文误匹配。 */
+  function normalizeIp(value) {
+    var text = trim(value);
+    if (!text || typeof BocIpCidr === 'undefined') return '';
+    var parsed = BocIpCidr.parseSingleIp(text);
+    return parsed ? BocIpCidr.ipFromBigInt(parsed.value, parsed.family) : '';
+  }
+
+  /** 按空白、逗号和分号拆分手工 IP，保留输入顺序。 */
+  function parseIpList(text) {
+    return String(text == null ? '' : text).split(/[\s,，;；]+/).filter(function (item) {
+      return trim(item);
+    });
+  }
+
+  /**
+   * 在 ADD 中定位当前域名，同时保留对象形态 ADD 的分组键作为 zone。
+   * 数组形态无法提供 zone，按设备常用值回退为 @。
+   */
+  function findDomainWithZone(jsonData, domainKey) {
+    var addNode = jsonData && jsonData.ADD;
+    var targetName = trim(domainKey && domainKey.name);
+    var targetType = trim(domainKey && domainKey.type).toLowerCase();
+    var i, j, zones, list, item;
+
+    if (addNode && typeof addNode === 'object' && !Array.isArray(addNode)) {
+      zones = Object.keys(addNode);
+      for (i = 0; i < zones.length; i++) {
+        list = Array.isArray(addNode[zones[i]]) ? addNode[zones[i]] : [];
+        for (j = 0; j < list.length; j++) {
+          item = list[j] || {};
+          if (trim(item.name) === targetName && trim(item.type).toLowerCase() === targetType) {
+            return { domain: item, zoneName: zones[i] || '@' };
+          }
+        }
+      }
+    } else if (Array.isArray(addNode)) {
+      for (i = 0; i < addNode.length; i++) {
+        item = addNode[i] || {};
+        if (trim(item.name) === targetName && trim(item.type).toLowerCase() === targetType) {
+          return { domain: item, zoneName: '@' };
+        }
+      }
+    }
+    return { domain: null, zoneName: '@' };
+  }
+
+  /**
+   * 收集当前域名引用池中的成员。IP 优先取池成员，缺失时回退 data_center；
+   * ID 使用设备的「数据中心名*服务成员名」规则，同一成员跨池引用时按 ID 去重。
+   */
+  function collectRrsMembers(jsonData, domainKey, dcMemberIndex) {
+    var found = findDomainWithZone(jsonData, domainKey);
+    var warnings = [];
+    var members = [];
+    var seenIds = {};
+    var gpMap = GslbProcess.buildGpoolMap(jsonData);
+    var refs = found.domain && Array.isArray(found.domain.gpool_list) ? found.domain.gpool_list : [];
+    var i, j, pool, poolMembers, member, dcName, memberName, memberId, dcMember, rawIp, ip;
+
+    if (!found.domain) {
+      warnings.push('未在导出 JSON 中找到当前域名记录');
+      return { domain: null, zoneName: found.zoneName, members: members, warnings: warnings };
+    }
+
+    for (i = 0; i < refs.length; i++) {
+      pool = gpMap[refs[i] && refs[i].gpool_name];
+      if (!pool) {
+        warnings.push('地址池「' + trim(refs[i] && refs[i].gpool_name) + '」在导出 JSON 中不存在');
+        continue;
+      }
+      poolMembers = Array.isArray(pool.gmember_list) ? pool.gmember_list : [];
+      for (j = 0; j < poolMembers.length; j++) {
+        member = poolMembers[j] || {};
+        dcName = trim(member.dc_name);
+        memberName = trim(member.gmember_name);
+        memberId = dcName && memberName ? dcName + '*' + memberName : '';
+        if (memberId && seenIds[memberId]) continue;
+        if (memberId) seenIds[memberId] = true;
+
+        dcMember = dcMemberIndex && dcMemberIndex[dcName + '\0' + memberName];
+        rawIp = trim(member.ip) || trim(dcMember && dcMember.ip);
+        ip = normalizeIp(rawIp);
+        members.push({
+          id: memberId,
+          ip: ip,
+          rawIp: rawIp,
+          dcName: dcName,
+          memberName: memberName
+        });
+      }
+    }
+
+    return { domain: found.domain, zoneName: found.zoneName, members: members, warnings: warnings };
+  }
+
+  function buildRrsMemberModifyCommand(zoneName, recordName, type, memberId, status) {
+    return 'modify gslb rrs-member'
+      + ' zone-name ' + zoneName
+      + ' record-name ' + recordName
+      + ' type ' + type
+      + ' pool-member id ' + memberId
+      + ' status ' + status
+      + ' force';
+  }
+
+  /**
+   * 将勾选与手工 IP 取并集后匹配当前域名成员，并为每个去重 ID 生成一条命令。
+   */
+  function buildRrsMemberCommands(jsonData, domainKey, selectedIps, manualIpsText, status, dcMemberIndex) {
+    var collected = collectRrsMembers(jsonData, domainKey, dcMemberIndex);
+    var warnings = collected.warnings.slice();
+    var requested = (selectedIps || []).concat(parseIpList(manualIpsText));
+    var normalized = {};
+    var requestedOrder = [];
+    var lines = [];
+    var matched = [];
+    var seenIds = {};
+    var validStatus = trim(status).toLowerCase();
+    var type = trim(domainKey && domainKey.type).toLowerCase();
+    var i, rawIp, ip, hit, member;
+
+    if (validStatus !== 'enable' && validStatus !== 'disable') {
+      return { lines: [], warnings: warnings, matched: [], members: collected.members, zoneName: collected.zoneName, error: '请选择 enable 或 disable' };
+    }
+    if (type !== 'a' && type !== 'aaaa') {
+      return { lines: [], warnings: warnings, matched: [], members: collected.members, zoneName: collected.zoneName, error: '当前记录类型仅支持 A 或 AAAA' };
+    }
+
+    for (i = 0; i < requested.length; i++) {
+      rawIp = trim(requested[i]);
+      ip = normalizeIp(rawIp);
+      if (!ip) {
+        warnings.push('IP「' + rawIp + '」无法解析，已跳过');
+      } else if (!normalized[ip]) {
+        normalized[ip] = rawIp;
+        requestedOrder.push(ip);
+      }
+    }
+    if (!requestedOrder.length) {
+      return { lines: [], warnings: warnings, matched: [], members: collected.members, zoneName: collected.zoneName, error: '请勾选或手工输入至少一个成员 IP' };
+    }
+
+    for (i = 0; i < requestedOrder.length; i++) {
+      ip = requestedOrder[i];
+      hit = false;
+      for (var j = 0; j < collected.members.length; j++) {
+        member = collected.members[j];
+        if (member.ip !== ip) continue;
+        hit = true;
+        if (!member.id) {
+          warnings.push('IP「' + normalized[ip] + '」命中成员但缺少数据中心名或成员名，无法构造 ID');
+        } else if (!seenIds[member.id]) {
+          seenIds[member.id] = true;
+          matched.push(member);
+          lines.push(buildRrsMemberModifyCommand(
+            collected.zoneName,
+            trim(domainKey.name),
+            type,
+            member.id,
+            validStatus
+          ));
+        }
+      }
+      if (!hit) warnings.push('IP「' + normalized[ip] + '」未在当前域名成员中找到');
+    }
+
+    return {
+      lines: lines,
+      warnings: warnings,
+      matched: matched,
+      members: collected.members,
+      zoneName: collected.zoneName,
+      error: ''
+    };
+  }
+
   return {
     ALGO_MAP_PREF: ALGO_MAP_PREF,
     ALGO_MAP_ALT: ALGO_MAP_ALT,
@@ -376,6 +560,12 @@ var GslbCommands = (function () {
     formatMemberStatusCheck: formatMemberStatusCheck,
     collectResourcesForDomains: collectResourcesForDomains,
     buildCreateCommands: buildCreateCommands,
-    buildCommandsForDomains: buildCommandsForDomains
+    buildCommandsForDomains: buildCommandsForDomains,
+    normalizeIp: normalizeIp,
+    parseIpList: parseIpList,
+    findDomainWithZone: findDomainWithZone,
+    collectRrsMembers: collectRrsMembers,
+    buildRrsMemberModifyCommand: buildRrsMemberModifyCommand,
+    buildRrsMemberCommands: buildRrsMemberCommands
   };
 })();

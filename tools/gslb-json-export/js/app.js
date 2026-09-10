@@ -5,6 +5,7 @@
  *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
  *   → 点击查询/回车过滤（始终匹配域名名称与类型）→ 点击表格行在下方实时渲染关系图 / CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
+ *   → 选中单个域名 → 勾选或输入成员 IP → 生成逐 ID 的 RRS 成员启停命令
  *
  * 布局：表格始终可见，关系图固定显示在表格下方；重新查询/清除过滤时关系图自动清空
  * 唯一键：域名名称 + 域名类型（name+type），与 commands.js 保持一致
@@ -26,6 +27,7 @@ var GslbApp = (function () {
   var selectedDomainKey = { name: '', type: '' };
   var selectedRowIndices = {};
   var filterState = { query: '', scope: 'all', match: 'contains' };
+  var currentRrsMemberText = '';
 
   var groupDomain = null;
   var groupPool = null;
@@ -91,6 +93,13 @@ var GslbApp = (function () {
     });
     document.getElementById('btn-cmds-copy').addEventListener('click', copyCmds);
     document.getElementById('btn-cmds-download').addEventListener('click', downloadCmdsTxt);
+    document.getElementById('btn-rrs-member').addEventListener('click', showRrsMemberModal);
+    document.getElementById('btn-rrs-member-generate').addEventListener('click', generateRrsMemberCommands);
+    document.getElementById('btn-rrs-member-copy').addEventListener('click', copyRrsMemberCommands);
+    document.getElementById('btn-close-rrs-member').addEventListener('click', hideRrsMemberModal);
+    document.getElementById('rrs-member-overlay').addEventListener('click', function (e) {
+      if (e.target === this) hideRrsMemberModal();
+    });
 
     schemeSelect.addEventListener('change', function () {
       pref.last_scheme = schemeSelect.value;
@@ -130,6 +139,7 @@ var GslbApp = (function () {
 
     refreshFieldLists();
     updateViewGraphButton();
+    updateRrsMemberButton();
     updateGenCmdsButton();
     bindVirtualScroll();
     setStatus('状态：尚未加载 JSON');
@@ -149,6 +159,16 @@ var GslbApp = (function () {
     } else {
       btn.title = '请先在表格中点击一行选择域名';
     }
+  }
+
+  /** 成员启停严格绑定当前单选域名，没有域名选择时禁用入口。 */
+  function updateRrsMemberButton() {
+    var btn = document.getElementById('btn-rrs-member');
+    if (!btn) return;
+    btn.disabled = !jsonData || !selectedDomainKey.name;
+    btn.title = selectedDomainKey.name
+      ? '生成域名「' + selectedDomainKey.name + ' (' + selectedDomainKey.type + ')」的成员启停命令'
+      : '请先在表格中点击一行选择域名';
   }
 
   /** 从输入框读取条件并执行过滤（点击查询或回车触发）；过滤后清空关系图与行选中 */
@@ -176,6 +196,8 @@ var GslbApp = (function () {
     selectedDomainKey = { name: '', type: '' };
     selectedRowIndices = {};
     updateViewGraphButton();
+    updateRrsMemberButton();
+    resetRrsMemberModal();
     GslbGraph.render(null, null, '');
   }
 
@@ -436,6 +458,8 @@ var GslbApp = (function () {
 
     selectedDomainKey = { name: domainName, type: tr.getAttribute('data-domain-type') || '' };
     updateViewGraphButton();
+    updateRrsMemberButton();
+    resetRrsMemberModal();
 
     var tbody = document.getElementById('preview-body');
     var rows = tbody.querySelectorAll('tr.selected');
@@ -482,6 +506,8 @@ var GslbApp = (function () {
       measuredRowHeight = 0;
       selectedDomainKey = { name: '', type: '' };
       updateViewGraphButton();
+      updateRrsMemberButton();
+      resetRrsMemberModal();
       updateGenCmdsButton();
       GslbGraph.render(null, null, '');
       setStatus('状态：已加载文件 ' + file.name);
@@ -598,6 +624,8 @@ var GslbApp = (function () {
     selectedDomainKey = { name: '', type: '' };
     selectedRowIndices = {};
     updateViewGraphButton();
+    updateRrsMemberButton();
+    resetRrsMemberModal();
     updateGenCmdsButton();
 
     syncFilterFromInputs();
@@ -849,6 +877,101 @@ var GslbApp = (function () {
     BocUtils.downloadBlob(currentCmdsText, filename, 'text/plain;charset=utf-8');
   }
 
+  /** 清空并关闭旧成员命令，避免重新筛选、导入或切换域名后误用。 */
+  function resetRrsMemberModal() {
+    currentRrsMemberText = '';
+    var overlay = document.getElementById('rrs-member-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('visible');
+    document.getElementById('rrs-member-list').innerHTML = '';
+    document.getElementById('rrs-member-manual-ips').value = '';
+    document.getElementById('rrs-member-warning').style.display = 'none';
+    document.getElementById('rrs-member-warning').textContent = '';
+    document.getElementById('rrs-member-pre').textContent = '';
+    document.getElementById('btn-rrs-member-copy').disabled = true;
+  }
+
+  /** 打开弹窗时从完整导出 JSON 收集当前域名成员，不依赖预览列是否包含 IP。 */
+  function showRrsMemberModal() {
+    if (!jsonData || !selectedDomainKey.name) {
+      alert('请先在表格中点击一行选择域名。');
+      return;
+    }
+
+    resetRrsMemberModal();
+    var collected = GslbCommands.collectRrsMembers(jsonData, selectedDomainKey, dcMemberIndex);
+    var list = document.getElementById('rrs-member-list');
+    var seenIps = {};
+    var ipCounts = {};
+    var i;
+
+    for (i = 0; i < collected.members.length; i++) {
+      if (collected.members[i].ip) {
+        ipCounts[collected.members[i].ip] = (ipCounts[collected.members[i].ip] || 0) + 1;
+      }
+    }
+    for (i = 0; i < collected.members.length; i++) {
+      var ip = collected.members[i].ip;
+      if (!ip || seenIps[ip]) continue;
+      seenIps[ip] = true;
+      var label = document.createElement('label');
+      label.className = 'rrs-member-option';
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = ip;
+      checkbox.className = 'rrs-member-checkbox';
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(ip + (ipCounts[ip] > 1 ? '（' + ipCounts[ip] + ' 个成员 ID）' : '')));
+      list.appendChild(label);
+    }
+    if (!list.children.length) {
+      list.innerHTML = '<div class="rrs-member-empty">当前域名未找到可用的成员 IP，可在右侧手工输入后尝试匹配。</div>';
+    }
+
+    document.getElementById('rrs-member-meta').textContent =
+      '域名：' + selectedDomainKey.name + '　类型：' + selectedDomainKey.type
+      + '　zone：' + collected.zoneName;
+    renderRrsMemberWarnings(collected.warnings);
+    document.getElementById('rrs-member-overlay').classList.add('visible');
+  }
+
+  function hideRrsMemberModal() {
+    document.getElementById('rrs-member-overlay').classList.remove('visible');
+  }
+
+  function renderRrsMemberWarnings(warnings, error) {
+    var box = document.getElementById('rrs-member-warning');
+    var messages = [];
+    if (error) messages.push('错误：' + error);
+    for (var i = 0; i < (warnings || []).length; i++) messages.push('⚠ ' + warnings[i]);
+    box.textContent = messages.join('\n');
+    box.style.display = messages.length ? '' : 'none';
+  }
+
+  function generateRrsMemberCommands() {
+    var checkboxes = document.querySelectorAll('#rrs-member-list .rrs-member-checkbox:checked');
+    var selectedIps = [];
+    for (var i = 0; i < checkboxes.length; i++) selectedIps.push(checkboxes[i].value);
+
+    var result = GslbCommands.buildRrsMemberCommands(
+      jsonData,
+      selectedDomainKey,
+      selectedIps,
+      document.getElementById('rrs-member-manual-ips').value,
+      document.getElementById('rrs-member-status').value,
+      dcMemberIndex
+    );
+    currentRrsMemberText = result.lines.join('\n');
+    document.getElementById('rrs-member-pre').textContent = currentRrsMemberText;
+    document.getElementById('btn-rrs-member-copy').disabled = !currentRrsMemberText;
+    renderRrsMemberWarnings(result.warnings, result.error);
+  }
+
+  function copyRrsMemberCommands() {
+    if (!currentRrsMemberText) return;
+    BocUtils.copyText(currentRrsMemberText);
+  }
+
   function showHelp() {
     document.getElementById('help-overlay').classList.add('visible');
   }
@@ -876,6 +999,8 @@ var GslbApp = (function () {
                    selectedDomainKey.type === (tr.getAttribute('data-domain-type') || '')) {
           selectedDomainKey = { name: '', type: '' };
           updateViewGraphButton();
+          updateRrsMemberButton();
+          resetRrsMemberModal();
           GslbGraph.render(null, null, '');
         }
         return;

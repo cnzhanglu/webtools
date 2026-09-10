@@ -78,6 +78,7 @@
       <button class="btn btn-primary btn-sm" id="btn-filter-query" type="button">查询</button>
       <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除</button>
       <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
+      <button class="btn btn-outline btn-sm" id="btn-rrs-member" type="button" disabled title="请先在表格中点击一行选择域名">成员启停命令</button>
       <button class="btn btn-outline btn-sm" id="btn-gen-cmds" type="button" disabled title="请先导入 JSON 并点击「预览」">⚙ 生成创建命令</button>
     </div>
     <div class="panel-body" id="view-table">
@@ -109,6 +110,38 @@
     </div>
   </div>
 
+</div>
+
+<!-- 当前域名的 RRS 成员启停弹窗 -->
+<div class="modal-overlay" id="rrs-member-overlay">
+  <div class="modal-box modal-box-wide">
+    <div class="modal-header">RRS 成员启停命令</div>
+    <div class="modal-body rrs-member-body">
+      <div class="cmds-meta" id="rrs-member-meta"></div>
+      <div class="rrs-member-form">
+        <div>
+          <label class="rrs-member-label">当前域名成员 IP（可多选）</label>
+          <div class="rrs-member-list" id="rrs-member-list"></div>
+        </div>
+        <div class="rrs-member-inputs">
+          <label class="rrs-member-label" for="rrs-member-manual-ips">手工输入 IP（每行一个，也可用逗号分隔）</label>
+          <textarea id="rrs-member-manual-ips" placeholder="192.0.2.10&#10;2001:db8::10" spellcheck="false"></textarea>
+          <label class="rrs-member-label" for="rrs-member-status">目标状态</label>
+          <select id="rrs-member-status">
+            <option value="disable">disable（隔离）</option>
+            <option value="enable">enable（恢复）</option>
+          </select>
+          <button class="btn btn-primary" id="btn-rrs-member-generate" type="button">生成命令</button>
+        </div>
+      </div>
+      <div class="cmds-warning-bar" id="rrs-member-warning" style="display:none"></div>
+      <pre class="cmds-pre" id="rrs-member-pre"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-rrs-member-copy" type="button" disabled>复制命令</button>
+      <button class="btn btn-outline" id="btn-close-rrs-member" type="button">关闭</button>
+    </div>
+  </div>
 </div>
 
 <!-- 创建命令弹窗 -->
@@ -147,6 +180,7 @@
 5 点击表格行选择域名，下方关系图实时展示「域名 → 地址池 → 服务成员」引用拓扑；关系图以「域名名称 + 类型」区分（同名 A/AAAA 互不干扰）；搜索框可匹配域名类型，无需勾选域名类型列
 6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 7 点击「生成创建命令」可基于当前过滤域名生成完整的 create gslb ... CLI 命令（支持复制与 TXT 下载）
+8 选中表格中的一个域名后，可点击「成员启停命令」，勾选该域名成员 IP 或手工输入 IP，生成逐成员 ID 的 enable / disable 命令
 
 操作步骤：
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
@@ -154,6 +188,7 @@
 3. 在字段配置区选择需要导出的字段，可排序
 4. 点击「预览」查看表格；点击表格中的任意行，下方关系图区域即实时展示该域名的「域名 → 地址池 → 服务成员」拓扑；重新查询或清除过滤后关系图自动清空
 4a. 可选：在搜索框输入关键字过滤域名，再点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
+4b. 可选：点击一行选中域名，再点「成员启停命令」；成员范围仅限当前域名，勾选 IP 与手工输入 IP 会合并匹配，直接使用已导入的完整 JSON，无需再次粘贴设备返回
 5. 点击「导出 CSV」生成明细导出；点击「导出域名列表 CSV」按域名去重聚合导出
 6. 点击「导出域名列表 TXT」可导出空格分隔文本（无标题行）
 7. 点击「导出未引用地址池 CSV」导出未被任何域名引用的地址池（列取自地址池/成员字段选择）
@@ -180,6 +215,7 @@
 </footer>
 
 <script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/ipcidr.js"></script>
 <script src="js/fields.js"></script>
 <script src="js/process.js"></script>
 <script src="js/commands.js"></script>
