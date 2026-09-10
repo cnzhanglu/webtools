@@ -11,6 +11,7 @@
  *   buildOrphanGmemberRows — 未被地址池引用的数据中心服务成员
  *   buildTopology — 构建域名-池-成员引用图（池按 gpool_list 顺序，成员按 seq）
  *   filterRowsByColumns — 预览表逐列 AND 过滤
+ *   measurePreviewColumnWidths — 预览表列宽估算（不依赖 DOM，供冻结 colgroup）
  *   buildCsvContent — 带 UTF-8 BOM 的 CSV 文本
  *
  * 依赖：GslbFields（字段名与中英文映射）
@@ -997,6 +998,54 @@ var GslbProcess = (function () {
     return out;
   }
 
+  /** 预览表列宽：单列最小宽、单元格左右 padding、过滤框最小内容宽、拖动手柄占位 */
+  var PREVIEW_COL_MIN = 88;
+  var PREVIEW_CELL_H_PAD = 24;
+  var PREVIEW_FILTER_MIN = 80;
+  var PREVIEW_RESIZE_HANDLE = 4;
+
+  /**
+   * 混合中英文文本宽度估算（Node 测试与浏览器无 canvas 时共用）。
+   * CJK 按 13px、ASCII 按 7.5px（约 .82rem 下的经验值）。
+   */
+  function estimateTextWidth(text) {
+    var s = text === null || text === undefined ? '' : String(text);
+    var i;
+    var w = 0;
+    for (i = 0; i < s.length; i++) {
+      w += s.charCodeAt(i) > 255 ? 13 : 7.5;
+    }
+    return w;
+  }
+
+  /**
+   * 根据列 key、表头中文与当前展示行估算各列像素宽，避免虚拟滚动换行时表头随内容抖动。
+   * labelForKey(colKey) 返回表头中文；measureText 可选（浏览器可传 canvas 测量函数）。
+   */
+  function measurePreviewColumnWidths(columns, rows, labelForKey, measureText) {
+    var measure = measureText || estimateTextWidth;
+    var labelFn = labelForKey || function (k) { return k; };
+    var widths = [];
+    var c;
+    var r;
+    var colKey;
+    var contentW;
+    var val;
+    if (!columns || !columns.length) return widths;
+
+    for (c = 0; c < columns.length; c++) {
+      colKey = columns[c];
+      contentW = measure(labelFn(colKey));
+      if (contentW < PREVIEW_FILTER_MIN) contentW = PREVIEW_FILTER_MIN;
+      for (r = 0; r < (rows || []).length; r++) {
+        val = rows[r][colKey];
+        contentW = Math.max(contentW, measure(val === null || val === undefined ? '' : String(val)));
+      }
+      widths.push(Math.max(PREVIEW_COL_MIN, Math.ceil(contentW + PREVIEW_CELL_H_PAD + PREVIEW_RESIZE_HANDLE)));
+    }
+    return widths;
+  }
+
   return {
     isScalar: isScalar,
     isDisabledEnable: isDisabledEnable,
@@ -1011,6 +1060,8 @@ var GslbProcess = (function () {
     buildDomainListRows: buildDomainListRows,
     buildTopology: buildTopology,
     buildCsvContent: buildCsvContent,
-    filterRowsByColumns: filterRowsByColumns
+    filterRowsByColumns: filterRowsByColumns,
+    estimateTextWidth: estimateTextWidth,
+    measurePreviewColumnWidths: measurePreviewColumnWidths
   };
 })();

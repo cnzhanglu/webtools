@@ -294,6 +294,7 @@
 }
 
 #preview-table {
+  table-layout: fixed;
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;
@@ -312,6 +313,8 @@
   border-bottom: 2px solid #d0d7e3;
   white-space: nowrap;
   text-align: left;
+  position: relative;
+  overflow: hidden;
 }
 #preview-table thead tr.filter-row th {
   background: #e8f1fb;
@@ -324,6 +327,23 @@
   border-bottom: 1px solid #eaecf0;
   white-space: nowrap;
   user-select: text;
+  overflow: hidden;
+}
+.preview-col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+.preview-col-resize:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+body.preview-col-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 #preview-table tbody tr:hover {
   background: #f5f8ff;
@@ -359,7 +379,8 @@
   background: transparent;
 }
 
-#btn-view-graph:disabled {
+#btn-view-graph:disabled,
+#btn-export-display:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
