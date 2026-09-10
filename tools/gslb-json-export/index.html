@@ -35,7 +35,7 @@
       <label for="scheme-select">GSLB 配置导出方案：</label>
       <select id="scheme-select"></select>
       <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览</button>
-      <button class="btn btn-success" id="btn-export" type="button">💾 导出 CSV</button>
+      <button class="btn btn-success" id="btn-export" type="button">💾 导出全量 CSV</button>
       <button class="btn btn-outline" id="btn-help" type="button">📘 工具说明</button>
       <span class="status-bar" id="status-text">状态：尚未加载 JSON</span>
     </div>
@@ -73,6 +73,7 @@
       </select>
       <button class="btn btn-primary btn-sm" id="btn-filter-query" type="button">查询</button>
       <button class="btn btn-outline btn-sm" id="btn-clear-filter" type="button">清除过滤</button>
+      <button class="btn btn-success btn-sm" id="btn-export-display" type="button" disabled title="请先导入 JSON 并点击「预览」">💾 导出显示 CSV</button>
       <button class="btn btn-outline btn-sm" id="btn-view-graph" type="button" disabled title="请先在表格中点击一行选择域名">查看关系图</button>
       <button class="btn btn-outline btn-sm" id="btn-rrs-member" type="button" disabled title="请先在表格中点击一行选择域名">成员启停命令</button>
       <button class="btn btn-outline btn-sm" id="btn-gen-cmds" type="button" disabled title="请先导入 JSON 并点击「预览」">⚙ 生成创建命令</button>
@@ -80,6 +81,7 @@
     <div class="panel-body" id="view-table">
       <div class="preview-scroll" id="preview-scroll">
         <table id="preview-table">
+          <colgroup id="preview-cols"></colgroup>
           <thead id="preview-head"></thead>
           <tbody id="preview-body">
             <tr><td><span class="empty-hint" style="color:#999;padding:20px;display:block">导入 JSON 并点击「预览」查看数据</span></td></tr>
@@ -179,7 +181,7 @@
 3 支持高级字段：HMS、Pass、池启用、DC启用等
 4 支持虚拟滚动预览大量数据；表头每列可独立过滤（多列条件同时生效），单元格完整显示可直接选中复制；Ctrl+C 也可复制选中行
 5 单击表格行选择域名；双击行或点击「查看关系图」以弹窗查看「域名 → 地址池 → 服务成员」引用拓扑（同名 A/AAAA 互不干扰）；弹窗仅可通过右上角 × 关闭
-6 导出 CSV 使用 UTF-8 BOM，可直接用 Excel 打开
+6 顶部「导出全量 CSV」导出全部明细；预览区「导出显示 CSV」仅导出当前过滤后可见行。CSV 使用 UTF-8 BOM，可直接用 Excel 打开
 7 点击「生成创建命令」可基于当前过滤域名生成完整的 create gslb ... CLI 命令（支持复制与 TXT 下载）
 8 选中表格中的一个域名后，可点击「成员启停命令」，勾选该域名成员（列表同时显示 IP、数据中心、VS 名称和当前启停状态）或手工输入 IP，生成逐成员 ID 的 enable / disable 命令
 
@@ -190,7 +192,7 @@
 4. 点击「预览」查看表格；在表头过滤框按列筛选；单击行选择域名，双击行或点「查看关系图」打开拓扑弹窗（仅 × 关闭）
 4a. 可选：按列过滤后点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
 4b. 可选：点击一行选中域名，再点「成员启停命令」；成员范围仅限当前域名。勾选列表按服务成员分行（同一 IP 的不同数据中心/VS 可区分，并显示池成员与服务成员当前启停状态），勾选与手工输入 IP 会合并匹配，仍按 IP 命中成员并按 DC*VS 去重生成命令；直接使用已导入的完整 JSON，无需再次粘贴设备返回
-5. 点击「导出 CSV」生成明细导出；点击「导出域名列表 CSV」按域名去重聚合导出
+5. 点击「导出全量 CSV」生成全部明细；在预览区点击「导出显示 CSV」仅导出当前过滤后可见行；点击「导出域名列表 CSV」按域名去重聚合导出
 6. 点击「导出域名列表 TXT」可导出空格分隔文本（无标题行）
 7. 点击「导出未引用地址池 CSV」导出未被任何域名引用的地址池（列取自地址池/成员字段选择）
 8. 点击「导出未引用的服务成员 CSV」导出未被任何地址池引用的数据中心服务成员（列取自成员字段选择）
@@ -198,7 +200,8 @@
 导出说明：
 1 可导出域名关联的对象数据
 2 按选中字段顺序导出列
-3 孤儿资源导出复用字段穿梭框中的地址池/成员列配置，不含域名字段
+3 全量 CSV 文件名前缀 gslb_export_；显示 CSV 前缀 gslb_export_display_
+4 孤儿资源导出复用字段穿梭框中的地址池/成员列配置，不含域名字段
 
 建议使用场景：
 1 运维巡检：检查池、成员状态与 HMS 配置

@@ -4,7 +4,7 @@
  * 数据流：
  *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
  *   → 点击查询/回车或表头列过滤（多列 AND）→ 单击表格行选中域名
- *   → 双击行或「查看关系图」打开近全屏弹窗 / CSV 导出（UTF-8 BOM）
+ *   → 双击行或「查看关系图」打开近全屏弹窗 / 全量 CSV 或预览显示 CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
  *   → 选中单个域名 → 勾选成员（显示 IP / DC / VS）或输入 IP → 生成逐 ID 的 RRS 成员启停命令
  *
@@ -41,6 +41,11 @@ var GslbApp = (function () {
   var measuredRowHeight = 0;
   var VIRTUAL_OVERSCAN = 6;
   var scrollRaf = null;
+  /** 冻结列宽（px）；仅预览/过滤后重测，滚动不重测；拖动手柄可改宽 */
+  var previewColumnWidths = [];
+  var colResizeState = null;
+  var colResizeBound = false;
+  var PREVIEW_COL_MIN = 88;
 
   function init() {
     pref = GslbFields.loadPref();
@@ -78,6 +83,7 @@ var GslbApp = (function () {
     });
     document.getElementById('btn-preview').addEventListener('click', preview);
     document.getElementById('btn-export').addEventListener('click', exportCsv);
+    document.getElementById('btn-export-display').addEventListener('click', exportDisplayCsv);
     document.getElementById('btn-export-domain-list').addEventListener('click', exportDomainListCsv);
     document.getElementById('btn-export-domain-list-txt').addEventListener('click', exportDomainListTxt);
     document.getElementById('btn-export-orphan-pool').addEventListener('click', exportOrphanPoolCsv);
@@ -143,7 +149,9 @@ var GslbApp = (function () {
     updateViewGraphButton();
     updateRrsMemberButton();
     updateGenCmdsButton();
+    updateExportDisplayButton();
     bindVirtualScroll();
+    bindPreviewColResize();
     setStatus('状态：尚未加载 JSON');
   }
 
@@ -406,6 +414,119 @@ var GslbApp = (function () {
     restoreRowSelection();
   }
 
+  function labelForPreviewColumn(colKey) {
+    return GslbFields.keyToCn(colKey);
+  }
+
+  /** 浏览器端可选 canvas 测量；无 canvas 时回退到 process 内估算 */
+  function createCanvasMeasureText() {
+    try {
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.font = '600 .82rem "PingFang SC", "Microsoft YaHei", sans-serif';
+      return function (text) {
+        return ctx.measureText(text === null || text === undefined ? '' : String(text)).width;
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function measurePreviewColumnWidths() {
+    var measureFn = createCanvasMeasureText();
+    return GslbProcess.measurePreviewColumnWidths(
+      previewColumns,
+      displayRows,
+      labelForPreviewColumn,
+      measureFn
+    );
+  }
+
+  function applyPreviewColgroup(widths) {
+    var colgroup = document.getElementById('preview-cols');
+    var table = document.getElementById('preview-table');
+    var i;
+    var col;
+    var total = 0;
+    if (!colgroup) return;
+    colgroup.innerHTML = '';
+    for (i = 0; i < widths.length; i++) {
+      col = document.createElement('col');
+      col.style.width = widths[i] + 'px';
+      colgroup.appendChild(col);
+      total += widths[i];
+    }
+    if (table && widths.length) {
+      table.style.width = Math.max(total, 0) + 'px';
+    } else if (table) {
+      table.style.width = '';
+    }
+  }
+
+  /** 预览或过滤后重算列宽；虚拟滚动 renderVirtualSlice 不调用 */
+  function syncPreviewColumnWidths() {
+    if (!previewColumns.length) {
+      previewColumnWidths = [];
+      applyPreviewColgroup([]);
+      return;
+    }
+    previewColumnWidths = measurePreviewColumnWidths();
+    applyPreviewColgroup(previewColumnWidths);
+  }
+
+  function setPreviewColWidth(colIndex, widthPx) {
+    var colgroup = document.getElementById('preview-cols');
+    var table = document.getElementById('preview-table');
+    var cols;
+    var i;
+    var total;
+    if (!previewColumnWidths.length || colIndex < 0 || colIndex >= previewColumnWidths.length) return;
+    previewColumnWidths[colIndex] = widthPx;
+    cols = colgroup ? colgroup.querySelectorAll('col') : [];
+    if (cols[colIndex]) cols[colIndex].style.width = widthPx + 'px';
+    if (table) {
+      total = 0;
+      for (i = 0; i < previewColumnWidths.length; i++) total += previewColumnWidths[i];
+      table.style.width = total + 'px';
+    }
+  }
+
+  function bindPreviewColResize() {
+    if (colResizeBound) return;
+    colResizeBound = true;
+
+    document.addEventListener('mousemove', function (e) {
+      if (!colResizeState) return;
+      var next = colResizeState.startWidth + (e.clientX - colResizeState.startX);
+      if (next < PREVIEW_COL_MIN) next = PREVIEW_COL_MIN;
+      setPreviewColWidth(colResizeState.colIndex, next);
+    });
+
+    document.addEventListener('mouseup', function () {
+      if (!colResizeState) return;
+      colResizeState = null;
+      document.body.classList.remove('preview-col-resizing');
+    });
+
+    var thead = document.getElementById('preview-head');
+    if (!thead) return;
+    thead.addEventListener('mousedown', function (e) {
+      var handle = e.target.closest && e.target.closest('.preview-col-resize');
+      var colIndex;
+      if (!handle) return;
+      e.preventDefault();
+      colIndex = parseInt(handle.getAttribute('data-col-index'), 10);
+      if (isNaN(colIndex) || !previewColumnWidths[colIndex]) return;
+      colResizeState = {
+        colIndex: colIndex,
+        startX: e.clientX,
+        startWidth: previewColumnWidths[colIndex]
+      };
+      document.body.classList.add('preview-col-resizing');
+    });
+  }
+
   function rebuildPreviewHead(columns) {
     var thead = document.getElementById('preview-head');
     var trHead;
@@ -415,7 +536,13 @@ var GslbApp = (function () {
     trHead = document.createElement('tr');
     for (i = 0; i < columns.length; i++) {
       var th = document.createElement('th');
+      var handle = document.createElement('span');
       th.textContent = GslbFields.keyToCn(columns[i]);
+      handle.className = 'preview-col-resize';
+      handle.setAttribute('data-col-index', String(i));
+      handle.setAttribute('aria-hidden', 'true');
+      handle.title = '拖动调整列宽';
+      th.appendChild(handle);
       trHead.appendChild(th);
     }
     thead.appendChild(trHead);
@@ -432,12 +559,15 @@ var GslbApp = (function () {
 
     if (!columns.length) {
       thead.innerHTML = '';
+      previewColumnWidths = [];
+      applyPreviewColgroup([]);
       tbody.innerHTML = '<tr><td><span class="empty-hint">未选择任何字段</span></td></tr>';
       updatePreviewBadge(0, previewRows.length);
       return;
     }
 
     if (!thead.querySelector('.filter-row')) rebuildPreviewHead(columns);
+    syncPreviewColumnWidths();
 
     if (!rows.length) {
       var emptyTr = document.createElement('tr');
@@ -519,16 +649,19 @@ var GslbApp = (function () {
     if (!previewColumns.length) {
       displayRows = [];
       renderPreviewTable();
+      updateExportDisplayButton();
       return;
     }
     if (!previewRows.length) {
       displayRows = [];
       renderPreviewTable();
+      updateExportDisplayButton();
       return;
     }
     displayRows = GslbProcess.filterRowsByColumns(previewRows, filterState.columns, filterState.match);
     resetPreviewScroll();
     renderPreviewTable();
+    updateExportDisplayButton();
   }
 
   function onFileSelected(e) {
@@ -554,6 +687,7 @@ var GslbApp = (function () {
       updateRrsMemberButton();
       resetRrsMemberModal();
       updateGenCmdsButton();
+      updateExportDisplayButton();
       hideGraphModal();
       setStatus('状态：已加载文件 ' + file.name);
       refreshFieldLists();
@@ -672,6 +806,7 @@ var GslbApp = (function () {
     updateRrsMemberButton();
     resetRrsMemberModal();
     updateGenCmdsButton();
+    updateExportDisplayButton();
     hideGraphModal();
     pruneColumnFilters(columns);
     rebuildPreviewHead(columns);
@@ -738,7 +873,35 @@ var GslbApp = (function () {
     var csvContent = GslbProcess.buildCsvContent(columns, rows);
     var filename = 'gslb_export_' + new Date().toISOString().slice(0, 10) + '.csv';
     BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
-    alert('已导出 CSV：' + filename);
+    alert('已导出全量 CSV：' + filename);
+  }
+
+  /** 导出当前预览表可见行（含过滤）；列与预览一致。 */
+  function exportDisplayCsv() {
+    if (!jsonData) {
+      alert('请先导入 JSON。');
+      return;
+    }
+    if (!previewRows.length) {
+      alert('请先点击「预览」加载数据。');
+      return;
+    }
+    if (!previewColumns.length) {
+      alert('未选择任何字段，无法导出。');
+      return;
+    }
+
+    syncFilterFromInputs();
+    var rows = GslbProcess.filterRowsByColumns(previewRows, filterState.columns, filterState.match);
+    if (!rows.length) {
+      alert('当前无显示数据，请先预览或调整过滤条件。');
+      return;
+    }
+
+    var csvContent = GslbProcess.buildCsvContent(previewColumns, rows);
+    var filename = 'gslb_export_display_' + new Date().toISOString().slice(0, 10) + '.csv';
+    BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
+    alert('已导出显示 CSV：' + filename);
   }
 
   function exportDomainListCsv() {
@@ -861,6 +1024,16 @@ var GslbApp = (function () {
     var btn = document.getElementById('btn-gen-cmds');
     if (!btn) return;
     btn.disabled = !jsonData || !previewRows.length;
+  }
+
+  /** 无预览数据时禁用「导出显示 CSV」 */
+  function updateExportDisplayButton() {
+    var btn = document.getElementById('btn-export-display');
+    if (!btn) return;
+    btn.disabled = !jsonData || !previewRows.length;
+    btn.title = btn.disabled
+      ? '请先导入 JSON 并点击「预览」'
+      : '导出当前预览表显示的行（含过滤）';
   }
 
   /** 按过滤后域名记录生成 CLI 命令并弹窗展示 */
@@ -1087,6 +1260,7 @@ var GslbApp = (function () {
     init: init,
     preview: preview,
     exportCsv: exportCsv,
+    exportDisplayCsv: exportDisplayCsv,
     exportDomainListCsv: exportDomainListCsv,
     exportDomainListTxt: exportDomainListTxt,
     exportOrphanPoolCsv: exportOrphanPoolCsv,

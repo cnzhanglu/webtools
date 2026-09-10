@@ -10,6 +10,7 @@
  *   - 缺省 domainType（undefined）时不限制 type（向后兼容）
  *   - 四级 enable 禁用状态、向后传播与共享 Server 入站路径规则
  *   - filterRowsByColumns 单列/多列 AND、包含/等于、空条件
+ *   - measurePreviewColumnWidths 列宽估算
  *   - 预览页字段折叠与关系图弹窗静态结构
  */
 module.exports = function (test, assert, assertEq) {
@@ -321,6 +322,36 @@ module.exports = function (test, assert, assertEq) {
     assertEq(out[0]['domain.name'], 'other');
   });
 
+  test('measurePreviewColumnWidths: 空行按表头保底宽度', function () {
+    var w = GslbProcess.measurePreviewColumnWidths(
+      ['domain.name'],
+      [],
+      function () { return '域名名称'; }
+    );
+    assertEq(w.length, 1);
+    assert(w[0] >= 88, '空表也应有最小列宽');
+  });
+
+  test('measurePreviewColumnWidths: 短列不低于最小宽', function () {
+    var w = GslbProcess.measurePreviewColumnWidths(
+      ['domain.type'],
+      [{ 'domain.type': 'A' }],
+      function () { return '类型'; }
+    );
+    assertEq(w.length, 1);
+    assert(w[0] >= 88);
+  });
+
+  test('measurePreviewColumnWidths: 长文本列更宽', function () {
+    var w = GslbProcess.measurePreviewColumnWidths(
+      ['a', 'b'],
+      [{ a: 'x', b: 'this-is-a-very-long-cell-value-that-should-be-wider-than-short' }],
+      function (k) { return k; }
+    );
+    assertEq(w.length, 2);
+    assert(w[1] > w[0], '长文本列应比短列更宽');
+  });
+
   test('预览页字段配置默认折叠且关系图为独立弹窗', function () {
     var fs = require('fs');
     var path = require('path');
@@ -343,6 +374,12 @@ module.exports = function (test, assert, assertEq) {
     assert(/<div class="op-bar-row">[\s\S]*id="status-text"/.test(html),
       '状态应放在导入/方案/预览/导出同一行');
     assert(css.indexOf('body.graph-modal-open') !== -1, '打开关系图时应锁定背后页面滚动');
+    assert(html.indexOf('id="preview-cols"') !== -1, '预览表应有 colgroup 冻结列宽');
+    assert(css.indexOf('table-layout: fixed') !== -1, '预览表应使用固定列宽布局');
+    assert(css.indexOf('preview-col-resize') !== -1, '表头应有列宽拖动手柄');
+    assert(html.indexOf('id="btn-export-display"') !== -1, '预览区应有导出显示 CSV 按钮');
+    assert(html.indexOf('导出全量 CSV') !== -1, '顶部导出按钮应标明全量');
+    assert(app.indexOf('gslb_export_display_') !== -1, '显示 CSV 文件名前缀应为 gslb_export_display_');
   });
 
 };
