@@ -504,11 +504,33 @@
 .rrs-member-option {
   display: flex;
   gap: 8px;
-  align-items: center;
-  padding: 5px 2px;
-  font-family: 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
+  align-items: flex-start;
+  padding: 4px 2px;
   font-size: .82rem;
   word-break: break-all;
+}
+.rrs-member-option + .rrs-member-option {
+  border-top: 1px dashed #e8edf5;
+}
+.rrs-member-option input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.rrs-member-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.rrs-member-option-ip {
+  font-family: 'Consolas', 'SFMono-Regular', 'Menlo', monospace;
+  color: #1a1a2e;
+  line-height: 1.35;
+}
+.rrs-member-option-meta {
+  font-size: .74rem;
+  color: #64748b;
+  line-height: 1.35;
 }
 
 .rrs-member-empty {

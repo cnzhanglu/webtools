@@ -5,7 +5,7 @@
  *
  * 覆盖：算法映射、布尔格式化、资源收集、命令顺序与去重、多池 ratio 串、
  *       name+type 双记录独立、未知算法 warning、pass 字符串映射，以及
- *       当前域名 RRS 成员 IP 匹配、跨池 ID 去重、启停命令与 zone 推导
+ *       当前域名 RRS 成员 IP 匹配、跨池 ID 去重、勾选列表按成员保留 DC/VS、启停命令与 zone 推导
  */
 module.exports = function (test, assert, assertEq) {
 
@@ -447,6 +447,22 @@ module.exports = function (test, assert, assertEq) {
       {}
     );
     assert(result.lines[0].indexOf('zone-name @') !== -1);
+  });
+
+  test('RRS 成员：勾选列表按成员分行，同 IP 保留各自 DC 与 VS', function () {
+    var collected = GslbCommands.collectRrsMembers(
+      RRS_MEMBER_FIXTURE,
+      { name: 'app.example.com.', type: 'A' },
+      GslbProcess.buildDcMemberIndex(RRS_MEMBER_FIXTURE)
+    );
+    var items = GslbCommands.buildRrsMemberPickerItems(collected.members);
+    var sameIp = items.filter(function (it) { return it.ip === '192.0.2.10'; });
+    assertEq(sameIp.length, 2);
+    assertEq(sameIp[0].dcName, 'dc_a');
+    assertEq(sameIp[0].memberName, 'gm_shared');
+    assertEq(sameIp[1].dcName, 'dc_b');
+    assertEq(sameIp[1].memberName, 'gm_same_ip');
+    assertEq(items.filter(function (it) { return it.id === 'dc_a*gm_shared'; }).length, 1);
   });
 
   test('RRS 成员：未命中、非法 IP 与缺少 ID 返回中文警告', function () {

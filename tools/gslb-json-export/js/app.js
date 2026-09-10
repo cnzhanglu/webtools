@@ -5,7 +5,7 @@
  *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
  *   → 点击查询/回车过滤（始终匹配域名名称与类型）→ 点击表格行在下方实时渲染关系图 / CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
- *   → 选中单个域名 → 勾选或输入成员 IP → 生成逐 ID 的 RRS 成员启停命令
+ *   → 选中单个域名 → 勾选成员（显示 IP / DC / VS）或输入 IP → 生成逐 ID 的 RRS 成员启停命令
  *
  * 布局：表格始终可见，关系图固定显示在表格下方；重新查询/清除过滤时关系图自动清空
  * 唯一键：域名名称 + 域名类型（name+type），与 commands.js 保持一致
@@ -901,27 +901,32 @@ var GslbApp = (function () {
     resetRrsMemberModal();
     var collected = GslbCommands.collectRrsMembers(jsonData, selectedDomainKey, dcMemberIndex);
     var list = document.getElementById('rrs-member-list');
-    var seenIps = {};
-    var ipCounts = {};
-    var i;
+    var items = GslbCommands.buildRrsMemberPickerItems(collected.members);
+    var i, item, label, checkbox, textWrap, ipEl, metaEl, dcText, vsText;
 
-    for (i = 0; i < collected.members.length; i++) {
-      if (collected.members[i].ip) {
-        ipCounts[collected.members[i].ip] = (ipCounts[collected.members[i].ip] || 0) + 1;
-      }
-    }
-    for (i = 0; i < collected.members.length; i++) {
-      var ip = collected.members[i].ip;
-      if (!ip || seenIps[ip]) continue;
-      seenIps[ip] = true;
-      var label = document.createElement('label');
+    for (i = 0; i < items.length; i++) {
+      item = items[i];
+      dcText = item.dcName || '—';
+      vsText = item.memberName || '—';
+      label = document.createElement('label');
       label.className = 'rrs-member-option';
-      var checkbox = document.createElement('input');
+      label.title = item.ip + '　DC：' + dcText + '　VS：' + vsText;
+      checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.value = ip;
+      checkbox.value = item.ip;
       checkbox.className = 'rrs-member-checkbox';
+      textWrap = document.createElement('span');
+      textWrap.className = 'rrs-member-option-text';
+      ipEl = document.createElement('span');
+      ipEl.className = 'rrs-member-option-ip';
+      ipEl.textContent = item.ip;
+      metaEl = document.createElement('span');
+      metaEl.className = 'rrs-member-option-meta';
+      metaEl.textContent = 'DC：' + dcText + '　VS：' + vsText;
+      textWrap.appendChild(ipEl);
+      textWrap.appendChild(metaEl);
       label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(ip + (ipCounts[ip] > 1 ? '（' + ipCounts[ip] + ' 个成员 ID）' : '')));
+      label.appendChild(textWrap);
       list.appendChild(label);
     }
     if (!list.children.length) {

@@ -13,6 +13,8 @@
  *   → collectResourcesForDomains  (查 ADD、gpool、data_center 索引)
  *   → buildCreateCommands         (按顺序拼接命令行 + 收集 warnings)
  *   → { lines, warnings }
+ *   当前域名成员启停：collectRrsMembers → buildRrsMemberPickerItems（按成员列出 IP/DC/VS）
+ *   → buildRrsMemberCommands（勾选/手工 IP 合并匹配，跨池按 dc*gmember_name 去重）
  */
 var GslbCommands = (function () {
   'use strict';
@@ -471,6 +473,27 @@ var GslbCommands = (function () {
     return { domain: found.domain, zoneName: found.zoneName, members: members, warnings: warnings };
   }
 
+  /**
+   * 勾选列表按服务成员分行，不再按 IP 去重，便于同 IP 区分 DC / VS。
+   * 无可用 IP 的成员无法按现有规则匹配，故不进入勾选项。
+   */
+  function buildRrsMemberPickerItems(members) {
+    var items = [];
+    var i, m, ip;
+    for (i = 0; i < (members || []).length; i++) {
+      m = members[i] || {};
+      ip = m.ip || '';
+      if (!ip) continue;
+      items.push({
+        ip: ip,
+        dcName: m.dcName || '',
+        memberName: m.memberName || '',
+        id: m.id || ''
+      });
+    }
+    return items;
+  }
+
   function buildRrsMemberModifyCommand(zoneName, recordName, type, memberId, status) {
     return 'modify gslb rrs-member'
       + ' zone-name ' + zoneName
@@ -565,6 +588,7 @@ var GslbCommands = (function () {
     parseIpList: parseIpList,
     findDomainWithZone: findDomainWithZone,
     collectRrsMembers: collectRrsMembers,
+    buildRrsMemberPickerItems: buildRrsMemberPickerItems,
     buildRrsMemberModifyCommand: buildRrsMemberModifyCommand,
     buildRrsMemberCommands: buildRrsMemberCommands
   };
