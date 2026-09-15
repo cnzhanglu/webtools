@@ -3,7 +3,9 @@
 ## 功能
 - 上传 xlsx（A/D/E/F/G 列）
 - 按应用名生成动态/静态“切换 + 回切”JSON
-- 动态类型上传 GSLB 全量 JSON，按域名与 IP 生成 `modify gslb service-member`
+- 动态类型上传 GSLB 全量 JSON，按域名与 IP 同时生成：
+  - Server 模式：`modify gslb service-member`
+  - 互联网模式：`modify gslb rrs-member`
 - 静态类型上传 DNS ZIP，按 `auth-zones.csv` 最细权威区生成 `modify rrs`
 - 为切换和回切分别生成应急命令 TXT
 - 支持 IPv4/IPv6、错误定位（行列）、批量下载
@@ -22,6 +24,7 @@
 8. `dns-lookup.js` 解压 DNS ZIP、解析 `auth-zones.csv`，按标签边界最长后缀匹配权威区
 9. `emergency-cmd.js`
    - 动态：`address` 对应成员生成 `status disable`，`new_address` 生成 `status enable`
+   - 动态每次同时生成 Server 模式与互联网模式两套切换/回切 TXT
    - 静态：`address/new_address` 生成 `rdata/new_rdata`，每个文件用 `.dns` 与 `quit` 包裹
    - 静态完整域名强制带尾点；IPv4 使用 `type a`，IPv6 使用 `type aaaa`
    - 回切沿用已互换的 `revertData`
@@ -29,12 +32,21 @@
 
 ## 动态应急命令格式
 
+Server 模式：
+
 ```text
 modify gslb service-member datacenter-name <dc_name> member-name <gmember_name> status disable
 modify gslb service-member datacenter-name <dc_name> member-name <gmember_name> status enable
 ```
 
 `member-name` 使用 GSLB JSON 中的 `gmember_name` 名称，不使用 `real_id`。
+
+互联网模式：
+
+```text
+modify gslb rrs-member zone-name <ADD键> record-name <域名> type <a|aaaa> pool-member id <dc_name>*<gmember_name> status disable force
+modify gslb rrs-member zone-name <ADD键> record-name <域名> type <a|aaaa> pool-member id <dc_name>*<gmember_name> status enable force
+```
 
 ## 静态应急命令格式
 

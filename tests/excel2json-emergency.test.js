@@ -55,6 +55,10 @@ module.exports = function (test, assert, assertEq) {
 
     assertEq(direct.length, 1);
     assertEq(direct[0].gmember_name, 'gm_b');
+    assertEq(direct[0].zone_name, '@');
+    assertEq(direct[0].record_name, 'app.example.com.');
+    assertEq(direct[0].record_type, 'a');
+    assertEq(direct[0].member_id, 'dc_b*gm_b');
     assertEq(fallback.length, 1);
     assertEq(fallback[0].dc_name, 'dc_c');
   });
@@ -75,6 +79,31 @@ module.exports = function (test, assert, assertEq) {
     assert(result.lines[0].indexOf('datacenter-name dc_b member-name gm_b status disable') !== -1);
     assert(result.lines[1].indexOf('datacenter-name dc_c member-name gm_c status enable') !== -1);
     assertEq(result.warnings.length, 0);
+  });
+
+  test('互联网模式生成 rrs-member 命令并带 force', function () {
+    var index = Excel2JsonGslbLookup.buildIndex(fixture());
+    var result = Excel2JsonEmergency.buildGslbCommands([
+      { fqdn: 'app.example.com', address: ['10.0.0.2'], new_address: ['10.0.0.3'] }
+    ], index, 'internet');
+
+    assertEq(
+      result.lines[0],
+      'modify gslb rrs-member zone-name @ record-name app.example.com. type a'
+      + ' pool-member id dc_b*gm_b status disable force'
+    );
+    assert(result.lines[1].indexOf('pool-member id dc_c*gm_c status enable force') !== -1);
+  });
+
+  test('互联网模式使用 ADD 分组键作为 zone-name', function () {
+    var data = fixture();
+    data.ADD = { 'prod.example': data.ADD['@'] };
+    var index = Excel2JsonGslbLookup.buildIndex(data);
+    var result = Excel2JsonEmergency.buildGslbCommands([
+      { fqdn: 'app.example.com', address: ['10.0.0.2'], new_address: [] }
+    ], index, 'internet');
+
+    assert(result.lines[0].indexOf('zone-name prod.example') !== -1);
   });
 
   test('重复成员命令去重，同 IP 多成员全部输出并警告', function () {
@@ -110,12 +139,16 @@ module.exports = function (test, assert, assertEq) {
     }];
     var stats = Excel2JsonEmergency.build(outputs, { gslbJson: fixture() });
 
-    assertEq(outputs[0].switchCmdFilename, '应用一_动态_切换_应急命令.txt');
-    assertEq(outputs[0].revertCmdFilename, '应用一_动态_回切_应急命令.txt');
+    assertEq(outputs[0].switchCmdFilename, '应用一_动态_切换_Server模式应急命令.txt');
+    assertEq(outputs[0].revertCmdFilename, '应用一_动态_回切_Server模式应急命令.txt');
+    assertEq(outputs[0].internetSwitchCmdFilename, '应用一_动态_切换_互联网模式应急命令.txt');
+    assertEq(outputs[0].internetRevertCmdFilename, '应用一_动态_回切_互联网模式应急命令.txt');
     assert(outputs[0].switchCmdText.indexOf('member-name gm_b status disable') !== -1);
     assert(outputs[0].revertCmdText.indexOf('member-name gm_b status enable') !== -1);
-    assertEq(stats.commandFileCount, 2);
-    assertEq(stats.commandCount, 4);
+    assert(outputs[0].internetSwitchCmdText.indexOf('pool-member id dc_b*gm_b status disable force') !== -1);
+    assert(outputs[0].internetRevertCmdText.indexOf('pool-member id dc_b*gm_b status enable force') !== -1);
+    assertEq(stats.commandFileCount, 4);
+    assertEq(stats.commandCount, 8);
   });
 
   test('DNS 区查询使用标签边界最长后缀', function () {
@@ -185,11 +218,12 @@ module.exports = function (test, assert, assertEq) {
     });
 
     assert(outputs[0].switchCmdText.indexOf('modify gslb service-member') !== -1);
+    assert(outputs[0].internetSwitchCmdText.indexOf('modify gslb rrs-member') !== -1);
     assert(outputs[1].switchCmdText.indexOf('modify rrs') !== -1);
     assert(outputs[1].switchCmdText.indexOf('rdata 1.1.1.1 new_rdata 2.2.2.2') !== -1);
     assert(outputs[1].revertCmdText.indexOf('rdata 2.2.2.2 new_rdata 1.1.1.1') !== -1);
-    assertEq(stats.commandFileCount, 4);
-    assertEq(stats.dynamicCommandCount, 4);
+    assertEq(stats.commandFileCount, 6);
+    assertEq(stats.dynamicCommandCount, 8);
     assertEq(stats.staticCommandCount, 2);
   });
 
@@ -208,5 +242,37 @@ module.exports = function (test, assert, assertEq) {
     assertEq(outputs[0].switchCmdFilename, undefined);
     assert(outputs[1].switchCmdFilename.indexOf('静态') !== -1);
     assertEq(stats.commandFileCount, 2);
+  });
+
+  test('页面操作按钮横排、格式说明默认隐藏并提供产出区全部下载', function () {
+    var fs = require('fs');
+    var path = require('path');
+    var html = fs.readFileSync(path.join(__dirname, '../tools/excel2json/index.html'), 'utf8');
+    var css = fs.readFileSync(path.join(__dirname, '../tools/excel2json/css/tool.css'), 'utf8');
+    var app = fs.readFileSync(path.join(__dirname, '../tools/excel2json/js/app.js'), 'utf8');
+
+    assert(css.indexOf('flex-direction: row') !== -1, '操作按钮应横向排列');
+    assert(html.indexOf('class="panel help-panel hidden"') !== -1, '格式说明应默认隐藏');
+    assert(css.indexOf('.help-panel.hidden') !== -1, '缺少格式说明隐藏样式');
+    assert(html.indexOf('id="btn-download-all-output"') !== -1, '产出文件区缺少全部下载按钮');
+    assert(app.indexOf("getElementById('btn-download-all-output').addEventListener('click', downloadAll)") !== -1,
+      '产出文件区全部下载按钮未绑定下载逻辑');
+    assert(html.indexOf('../../shared/js/xlsx.js') !== -1, '页面未加载 ZIP 生成器');
+    assert(app.indexOf('BocXlsx.buildZip(zipFiles)') !== -1, '全部下载未合并为 ZIP');
+    assert(app.indexOf("'application/zip'") !== -1, '全部下载未使用 ZIP MIME 类型');
+  });
+
+  test('ZIP 打包器使用 UTF-8 文件名标志并保留中文文件名', function () {
+    var name = '应用A_互联网模式应急命令.txt';
+    var bytes = BocXlsx.buildZip([{
+      name: name,
+      data: new TextEncoder().encode('测试内容')
+    }]);
+    var flag = bytes[6] | (bytes[7] << 8);
+    var nameLength = bytes[26] | (bytes[27] << 8);
+    var decodedName = new TextDecoder('utf-8').decode(bytes.subarray(30, 30 + nameLength));
+
+    assert((flag & 0x0800) !== 0, 'ZIP 本地文件头缺少 UTF-8 文件名标志');
+    assertEq(decodedName, name);
   });
 };
