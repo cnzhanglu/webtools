@@ -2,7 +2,8 @@
  * Excel 切换 JSON — 应急手动切换命令生成层
  *
  * 数据流：Excel2JsonProcess 的 switch/revert 数据
- * → 动态类型通过 GSLB 索引生成 service-member 启停命令
+ * → 动态类型通过 GSLB 索引同时生成 Server（service-member）
+ *   与互联网（rrs-member）两种启停命令
  * → 静态类型通过 DNS 权威区索引生成 modify rrs 命令
  * → TXT 文本、文件名、警告与统计。
  *
@@ -20,10 +21,11 @@ var Excel2JsonEmergency = (function () {
    * 为一组切换数据生成命令。
    * 未找到的域名/IP 不阻断任务；同一 IP 对应多个成员时全部输出并告警。
    */
-  function buildGslbCommands(data, index) {
+  function buildGslbCommands(data, index, mode) {
     var lines = [];
     var warnings = [];
     var seenLines = {};
+    var commandMode = mode === 'internet' ? 'internet' : 'server';
 
     function appendForIps(item, ips, status) {
       var i;
@@ -45,10 +47,21 @@ var Excel2JsonEmergency = (function () {
 
         for (j = 0; j < members.length; j++) {
           var member = members[j];
-          var line = 'modify gslb service-member'
-            + ' datacenter-name ' + member.dc_name
-            + ' member-name ' + member.gmember_name
-            + ' status ' + status;
+          var line;
+          if (commandMode === 'internet') {
+            line = 'modify gslb rrs-member'
+              + ' zone-name ' + member.zone_name
+              + ' record-name ' + member.record_name
+              + ' type ' + member.record_type
+              + ' pool-member id ' + member.member_id
+              + ' status ' + status
+              + ' force';
+          } else {
+            line = 'modify gslb service-member'
+              + ' datacenter-name ' + member.dc_name
+              + ' member-name ' + member.gmember_name
+              + ' status ' + status;
+          }
           if (!seenLines[line]) {
             seenLines[line] = true;
             lines.push(line);
@@ -159,6 +172,12 @@ var Excel2JsonEmergency = (function () {
     delete out.revertCmdFilename;
     delete out.switchCmdWarnings;
     delete out.revertCmdWarnings;
+    delete out.internetSwitchCmdText;
+    delete out.internetRevertCmdText;
+    delete out.internetSwitchCmdFilename;
+    delete out.internetRevertCmdFilename;
+    delete out.internetSwitchCmdWarnings;
+    delete out.internetRevertCmdWarnings;
   }
 
   function attachResult(out, switchResult, revertResult) {
@@ -168,6 +187,16 @@ var Excel2JsonEmergency = (function () {
     out.revertCmdFilename = out.appName + '_' + out.typeName + '_回切_应急命令.txt';
     out.switchCmdWarnings = switchResult.warnings;
     out.revertCmdWarnings = revertResult.warnings;
+  }
+
+  /** 动态互联网模式单独附加文件，避免与 Server 模式混在同一命令文件。 */
+  function attachInternetResult(out, switchResult, revertResult) {
+    out.internetSwitchCmdText = switchResult.text;
+    out.internetRevertCmdText = revertResult.text;
+    out.internetSwitchCmdFilename = out.appName + '_' + out.typeName + '_切换_互联网模式应急命令.txt';
+    out.internetRevertCmdFilename = out.appName + '_' + out.typeName + '_回切_互联网模式应急命令.txt';
+    out.internetSwitchCmdWarnings = switchResult.warnings;
+    out.internetRevertCmdWarnings = revertResult.warnings;
   }
 
   /**
@@ -194,11 +223,17 @@ var Excel2JsonEmergency = (function () {
       clearCommandOutput(out);
       var switchResult;
       var revertResult;
+      /* var 为函数作用域，每轮必须显式清空，避免动态结果串入后续静态项。 */
+      var internetSwitchResult = null;
+      var internetRevertResult = null;
 
       if (out.typeName === '动态' && gslbIndex) {
-        switchResult = buildGslbCommands(out.switchData || [], gslbIndex);
-        revertResult = buildGslbCommands(out.revertData || [], gslbIndex);
-        dynamicCommandCount += switchResult.lines.length + revertResult.lines.length;
+        switchResult = buildGslbCommands(out.switchData || [], gslbIndex, 'server');
+        revertResult = buildGslbCommands(out.revertData || [], gslbIndex, 'server');
+        internetSwitchResult = buildGslbCommands(out.switchData || [], gslbIndex, 'internet');
+        internetRevertResult = buildGslbCommands(out.revertData || [], gslbIndex, 'internet');
+        dynamicCommandCount += switchResult.lines.length + revertResult.lines.length
+          + internetSwitchResult.lines.length + internetRevertResult.lines.length;
       } else if (out.typeName === '静态' && config.dnsIndex) {
         switchResult = buildDnsCommands(out.switchData || [], config.dnsIndex);
         revertResult = buildDnsCommands(out.revertData || [], config.dnsIndex);
@@ -209,6 +244,13 @@ var Excel2JsonEmergency = (function () {
 
       attachResult(out, switchResult, revertResult);
       commandFileCount += 2;
+      if (internetSwitchResult) {
+        /* Server 文件沿用原属性；文件名补充模式，互联网文件使用独立属性。 */
+        out.switchCmdFilename = out.appName + '_' + out.typeName + '_切换_Server模式应急命令.txt';
+        out.revertCmdFilename = out.appName + '_' + out.typeName + '_回切_Server模式应急命令.txt';
+        attachInternetResult(out, internetSwitchResult, internetRevertResult);
+        commandFileCount += 2;
+      }
 
       commandCount += switchResult.lines.length + revertResult.lines.length;
       warningCount += switchResult.warnings.length + revertResult.warnings.length;
@@ -216,6 +258,14 @@ var Excel2JsonEmergency = (function () {
         switchResult.warnings.map(function (msg) { return out.switchCmdFilename + '：' + msg; }),
         revertResult.warnings.map(function (msg) { return out.revertCmdFilename + '：' + msg; })
       );
+      if (internetSwitchResult) {
+        commandCount += internetSwitchResult.lines.length + internetRevertResult.lines.length;
+        warningCount += internetSwitchResult.warnings.length + internetRevertResult.warnings.length;
+        allWarnings = allWarnings.concat(
+          internetSwitchResult.warnings.map(function (msg) { return out.internetSwitchCmdFilename + '：' + msg; }),
+          internetRevertResult.warnings.map(function (msg) { return out.internetRevertCmdFilename + '：' + msg; })
+        );
+      }
     }
 
     return {

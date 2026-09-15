@@ -8,6 +8,7 @@
 
 .op-body {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
@@ -55,6 +56,10 @@
 }
 
 /* 帮助面板 */
+.help-panel.hidden {
+  display: none;
+}
+
 .help-body {
   font-size: .88rem;
   line-height: 1.7;
@@ -155,6 +160,9 @@
 }
 
 @media (max-width: 900px) {
+  .op-body {
+    align-items: stretch;
+  }
   .content-row {
     grid-template-columns: 1fr;
   }

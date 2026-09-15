@@ -2,8 +2,9 @@
  * Excel 切换 JSON — 页面交互层
  *
  * 数据流：上传 Excel → 生成切换/回切 JSON；动态类型结合 GSLB JSON
- * → 生成 service-member 命令；静态类型结合 DNS ZIP → 生成 modify rrs 命令
- * → 文件列表预览、复制、单个或批量下载。
+ * → 同时生成 Server 模式 service-member 与互联网模式 rrs-member 命令；
+ * 静态类型结合 DNS ZIP → 生成 modify rrs 命令
+ * → 文件列表预览、复制、单个下载或 ZIP 打包下载全部文件。
  *
  * 依赖：BocUtils、BocXlsxRead、Excel2JsonProcess、Excel2JsonGslbLookup、
  * Excel2JsonDnsLookup、Excel2JsonEmergency
@@ -36,6 +37,7 @@ var Excel2JsonApp = (function () {
     document.getElementById('btn-copy').addEventListener('click', copyCurrent);
     document.getElementById('btn-download').addEventListener('click', downloadCurrent);
     document.getElementById('btn-download-all').addEventListener('click', downloadAll);
+    document.getElementById('btn-download-all-output').addEventListener('click', downloadAll);
   }
 
   function setStatus(text, isErr) {
@@ -189,6 +191,7 @@ var Excel2JsonApp = (function () {
       showError(result.error || '未知错误');
       showWarnings([]);
       clearPreview();
+      setDownloadAllDisabled(true);
       return;
     }
 
@@ -215,7 +218,7 @@ var Excel2JsonApp = (function () {
     setStatus(status);
 
     renderFileList(result.outputs);
-    document.getElementById('btn-download-all').disabled = !result.outputs.length;
+    setDownloadAllDisabled(!result.outputs.length);
 
     if (result.outputs.length) {
       selectItem(result.outputs[0].key + '_switch');
@@ -244,7 +247,9 @@ var Excel2JsonApp = (function () {
         { sub: '_switch', label: out.switchFilename },
         { sub: '_revert', label: out.revertFilename },
         { sub: '_switch_cmd', label: out.switchCmdFilename },
-        { sub: '_revert_cmd', label: out.revertCmdFilename }
+        { sub: '_revert_cmd', label: out.revertCmdFilename },
+        { sub: '_internet_switch_cmd', label: out.internetSwitchCmdFilename },
+        { sub: '_internet_revert_cmd', label: out.internetRevertCmdFilename }
       ].forEach(function (item) {
         if (!item.label) return;
         var btn = document.createElement('button');
@@ -294,6 +299,12 @@ var Excel2JsonApp = (function () {
       }
       if (key === out.key + '_revert_cmd' && out.revertCmdFilename) {
         return textFile(out.revertCmdFilename, out.revertCmdText);
+      }
+      if (key === out.key + '_internet_switch_cmd' && out.internetSwitchCmdFilename) {
+        return textFile(out.internetSwitchCmdFilename, out.internetSwitchCmdText);
+      }
+      if (key === out.key + '_internet_revert_cmd' && out.internetRevertCmdFilename) {
+        return textFile(out.internetRevertCmdFilename, out.internetRevertCmdText);
       }
     }
     return null;
@@ -347,6 +358,12 @@ var Excel2JsonApp = (function () {
     BocUtils.downloadBlob(data.text, data.filename, data.mime);
   }
 
+  /** 顶部与产出文件标题栏的两个入口始终保持相同可用状态。 */
+  function setDownloadAllDisabled(disabled) {
+    document.getElementById('btn-download-all').disabled = disabled;
+    document.getElementById('btn-download-all-output').disabled = disabled;
+  }
+
   function downloadAll() {
     if (!lastResult || !lastResult.outputs.length) return;
     var tasks = [];
@@ -355,18 +372,31 @@ var Excel2JsonApp = (function () {
       tasks.push(jsonFile(out.revertFilename, out.revertData));
       if (out.switchCmdFilename) tasks.push(textFile(out.switchCmdFilename, out.switchCmdText));
       if (out.revertCmdFilename) tasks.push(textFile(out.revertCmdFilename, out.revertCmdText));
+      if (out.internetSwitchCmdFilename) {
+        tasks.push(textFile(out.internetSwitchCmdFilename, out.internetSwitchCmdText));
+      }
+      if (out.internetRevertCmdFilename) {
+        tasks.push(textFile(out.internetRevertCmdFilename, out.internetRevertCmdText));
+      }
     });
-    tasks.forEach(function (task, idx) {
-      setTimeout(function () {
-        BocUtils.downloadBlob(task.text, task.filename, task.mime);
-      }, idx * 350);
+    var encoder = new TextEncoder();
+    var zipFiles = tasks.map(function (task) {
+      return {
+        name: task.filename,
+        data: encoder.encode(task.text)
+      };
     });
+    var zipBytes = BocXlsx.buildZip(zipFiles);
+    var baseName = String(excelFilename || 'Excel切换')
+      .replace(/\.xlsx$/i, '')
+      .replace(/[\\/:*?"<>|]/g, '_');
+    BocUtils.downloadBlob(zipBytes, baseName + '_全部文件.zip', 'application/zip');
   }
 
   document.addEventListener('DOMContentLoaded', function () {
     init();
     clearPreview();
-    document.getElementById('btn-download-all').disabled = true;
+    setDownloadAllDisabled(true);
   });
 
   return { init: init };

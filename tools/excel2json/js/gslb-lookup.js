@@ -2,7 +2,8 @@
  * Excel 切换 JSON — GSLB 成员查询层
  *
  * 数据流：GSLB 全量 JSON → ADD 域名 → gpool_list → gpool.gmember_list
- * → 按「规范化域名 + IP」建立服务成员索引 → 返回 dc_name / gmember_name。
+ * → 按「规范化域名 + IP」建立成员索引 → 返回 dc_name / gmember_name，
+ * 同时保留 RRS 所需的 zone、记录名和类型。
  *
  * 依赖：BocIpCidr（统一 IPv4/IPv6 文本格式）
  * 导出：Excel2JsonGslbLookup（buildIndex、findMembers）
@@ -23,19 +24,28 @@ var Excel2JsonGslbLookup = (function () {
     return parsed ? BocIpCidr.ipFromBigInt(parsed.value, parsed.family) : text;
   }
 
-  function getAddList(jsonData) {
+  /** ADD 对象的键即 zone；ADD 为数组时沿用设备根区 @。 */
+  function getAddEntries(jsonData) {
     var result = [];
     var addNode = jsonData && jsonData.ADD;
     var keys;
     var i;
+    var j;
 
-    if (Array.isArray(addNode)) return addNode;
+    if (Array.isArray(addNode)) {
+      for (i = 0; i < addNode.length; i++) {
+        result.push({ domain: addNode[i], zone_name: '@' });
+      }
+      return result;
+    }
     if (!addNode || typeof addNode !== 'object') return result;
 
     keys = Object.keys(addNode);
     for (i = 0; i < keys.length; i++) {
       if (Array.isArray(addNode[keys[i]])) {
-        result = result.concat(addNode[keys[i]]);
+        for (j = 0; j < addNode[keys[i]].length; j++) {
+          result.push({ domain: addNode[keys[i]][j], zone_name: keys[i] || '@' });
+        }
       }
     }
     return result;
@@ -73,17 +83,26 @@ var Excel2JsonGslbLookup = (function () {
     return result;
   }
 
-  function addMember(domainEntry, ip, dcName, gmemberName) {
+  function addMember(domainEntry, ip, dcName, gmemberName, rrsInfo) {
     if (!ip || !dcName || !gmemberName) return;
     if (!domainEntry[ip]) domainEntry[ip] = [];
 
-    var key = dcName + '\0' + gmemberName;
+    var key = (rrsInfo.zone_name || '@') + '\0' + (rrsInfo.record_type || '')
+      + '\0' + dcName + '\0' + gmemberName;
     var items = domainEntry[ip];
     var i;
     for (i = 0; i < items.length; i++) {
       if (items[i]._key === key) return;
     }
-    items.push({ dc_name: dcName, gmember_name: gmemberName, _key: key });
+    items.push({
+      dc_name: dcName,
+      gmember_name: gmemberName,
+      zone_name: rrsInfo.zone_name || '@',
+      record_name: rrsInfo.record_name || '',
+      record_type: String(rrsInfo.record_type || '').toLowerCase(),
+      member_id: dcName + '*' + gmemberName,
+      _key: key
+    });
   }
 
   /**
@@ -99,15 +118,16 @@ var Excel2JsonGslbLookup = (function () {
     }
 
     var domainIndex = {};
-    var addList = getAddList(jsonData);
+    var addEntries = getAddEntries(jsonData);
     var gpoolMap = buildGpoolMap(jsonData);
     var dcMemberMap = buildDcMemberMap(jsonData);
     var i;
     var j;
     var k;
 
-    for (i = 0; i < addList.length; i++) {
-      var domain = addList[i] || {};
+    for (i = 0; i < addEntries.length; i++) {
+      var entry = addEntries[i] || {};
+      var domain = entry.domain || {};
       var domainName = normalizeDomain(domain.name);
       if (!domainName) continue;
       if (!domainIndex[domainName]) domainIndex[domainName] = {};
@@ -124,7 +144,11 @@ var Excel2JsonGslbLookup = (function () {
           var gmemberName = poolMember.gmember_name || '';
           var dcMember = dcMemberMap[dcName + '\0' + gmemberName] || {};
           var ip = poolMember.ip || dcMember.ip || '';
-          addMember(domainIndex[domainName], normalizeIp(ip), dcName, gmemberName);
+          addMember(domainIndex[domainName], normalizeIp(ip), dcName, gmemberName, {
+            zone_name: entry.zone_name,
+            record_name: domain.name,
+            record_type: domain.type
+          });
         }
       }
     }

@@ -36,7 +36,7 @@
       <button class="btn btn-primary" id="btn-load" type="button">📂 上传 Excel (.xlsx)</button>
       <button class="btn btn-outline" id="btn-load-gslb" type="button">上传 GSLB JSON</button>
       <button class="btn btn-outline" id="btn-load-dns" type="button">上传 DNS ZIP</button>
-      <button class="btn btn-success" id="btn-download-all" type="button" disabled>⬇ 全部下载</button>
+      <button class="btn btn-success" id="btn-download-all" type="button" disabled>⬇ 全部下载 ZIP</button>
       <button class="btn btn-outline" id="btn-help-toggle" type="button"
               onclick="document.getElementById('help-panel').classList.toggle('hidden')">📘 格式说明</button>
     </div>
@@ -50,7 +50,7 @@
   <div class="warning-box" id="warning-box" style="display:none"></div>
 
   <!-- 帮助面板 -->
-  <div class="panel hidden" id="help-panel">
+  <div class="panel help-panel hidden" id="help-panel">
     <div class="panel-header"><h2>Excel 格式说明</h2></div>
     <div class="panel-body help-body">
       <p>第 1 行为标题行，数据从第 <strong>2 行</strong>起。</p>
@@ -68,7 +68,7 @@
       <p><strong>静态</strong>：address = [E IP]，new_address = [F IP]（允许一侧为空）；回切互换两列。</p>
       <p><strong>输出文件命名</strong>：<code>{应用名}_动态_切换.json</code>、<code>{应用名}_动态_回切.json</code>、<code>{应用名}_静态_切换.json</code>、<code>{应用名}_静态_回切.json</code></p>
       <p><strong>JSON 结构</strong>：<code>[{ "fqdn": "...", "address": [...], "new_address": [...] }]</code></p>
-      <p><strong>动态应急命令</strong>：上传 GSLB 全量 JSON，按域名和 IP 查询 <code>dc_name</code>、<code>gmember_name</code>。<code>address</code> 生成 <code>status disable</code>，<code>new_address</code> 生成 <code>status enable</code>。</p>
+      <p><strong>动态应急命令</strong>：上传 GSLB 全量 JSON 后，同时生成两套切换/回切文件。Server 模式操作 <code>service-member</code>；互联网模式操作域名下的 <code>rrs-member</code>。<code>address</code> 生成 <code>status disable</code>，<code>new_address</code> 生成 <code>status enable</code>。</p>
       <p><strong>静态应急命令</strong>：上传含 <code>auth-zones.csv</code> 的 DNS ZIP，按域名最长后缀匹配最细权威区，生成 <code>.dns</code>、<code>modify rrs view ... rdata ... new_rdata ...</code>、<code>quit</code> 命令。</p>
       <p><strong>匹配异常</strong>：找不到动态成员、静态权威区或静态任一侧 IP 为空时跳过并警告。</p>
     </div>
@@ -78,7 +78,10 @@
   <div class="content-row">
     <!-- 左侧：文件列表 -->
     <div class="panel file-panel">
-      <div class="panel-header"><h2>产出文件</h2></div>
+      <div class="panel-header">
+        <h2>产出文件</h2>
+        <button class="btn btn-success btn-sm" id="btn-download-all-output" type="button" disabled>下载所有文件 ZIP</button>
+      </div>
       <div class="panel-body" id="file-list">
         <div class="empty-hint">上传文件后显示</div>
       </div>
@@ -109,6 +112,7 @@
 </footer>
 
 <script src="../../shared/js/utils.js"></script>
+<script src="../../shared/js/xlsx.js"></script>
 <script src="../../shared/js/xlsx-read.js"></script>
 <script src="../../shared/js/ipcidr.js"></script>
 <script src="js/validate.js"></script>

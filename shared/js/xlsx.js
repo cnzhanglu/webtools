@@ -1,7 +1,7 @@
 /**
  * 纯 JS xlsx 生成器（STORED / 不压缩，无外部依赖）
  *
- * 实现原理：手写 OOXML（sheet/workbook/styles）+ ZIP 封装（本地 CRC32），
+ * 实现原理：手写 OOXML（sheet/workbook/styles）+ ZIP 封装（本地 CRC32、UTF-8 文件名），
  * 不依赖 SheetJS 等第三方库，满足离线 file:// 约束。
  *
  * 数据流：工具传入 rows + rowMapper → 生成 XML 片段 → buildZip 打包 → Uint8Array
@@ -59,6 +59,8 @@ var BocXlsx = (function () {
     var enc = new TextEncoder();
     var localParts = [], centralDirs = [], offset = 0;
     var DT = 0x5346, DD = 0x5929;
+    /* ZIP 通用标志 bit 11 表示文件名使用 UTF-8，支持打包中文产出文件名。 */
+    var UTF8_FLAG = 0x0800;
 
     for (var f = 0; f < files.length; f++) {
       var file = files[f];
@@ -68,7 +70,7 @@ var BocXlsx = (function () {
       var size = data.length;
       var lh   = new Uint8Array([
         0x50, 0x4b, 0x03, 0x04,
-        ...u16le(20), ...u16le(0), ...u16le(0),
+        ...u16le(20), ...u16le(UTF8_FLAG), ...u16le(0),
         ...u16le(DT), ...u16le(DD),
         ...u32le(crc), ...u32le(size), ...u32le(size),
         ...u16le(nb.length), ...u16le(0),
@@ -83,7 +85,7 @@ var BocXlsx = (function () {
     var cdParts = centralDirs.map(function (cd) {
       return new Uint8Array([
         0x50, 0x4b, 0x01, 0x02,
-        ...u16le(20), ...u16le(20), ...u16le(0), ...u16le(0),
+        ...u16le(20), ...u16le(20), ...u16le(UTF8_FLAG), ...u16le(0),
         ...u16le(DT), ...u16le(DD),
         ...u32le(cd.crc), ...u32le(cd.size), ...u32le(cd.size),
         ...u16le(cd.nb.length), ...u16le(0), ...u16le(0),

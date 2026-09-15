@@ -87,6 +87,7 @@ loadScript('tools/excel2json/js/process.js');
 console.log('\nExcel2JsonProcess');
 require('./excel2json-process.test.js')(test, assert, assertEq);
 
+loadScript('shared/js/xlsx.js');
 loadScript('tools/excel2json/js/gslb-lookup.js');
 loadScript('tools/excel2json/js/dns-lookup.js');
 loadScript('tools/excel2json/js/emergency-cmd.js');
