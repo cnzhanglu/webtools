@@ -683,6 +683,30 @@ body.graph-modal-open {
   white-space: normal;
 }
 
+.rrs-member-scope-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  color: #64748b;
+  font-size: .82rem;
+}
+.rrs-member-scope-row .rrs-member-label {
+  margin-bottom: 0;
+}
+.rrs-member-group + .rrs-member-group {
+  margin-top: 12px;
+}
+.rrs-member-group-title {
+  margin: 0 0 6px;
+  padding: 4px 0;
+  font-size: .82rem;
+  color: #334155;
+  border-bottom: 1px solid #d0d7e3;
+  overflow-wrap: anywhere;
+}
+
 .rrs-member-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -788,12 +812,15 @@ body.graph-modal-open {
   font-size: .82rem;
 }
 
-#rrs-member-status {
-  margin-bottom: 12px;
+#rrs-member-status,
+#rrs-member-scope {
   padding: 7px 10px;
   border: 1px solid #d0d7e3;
   border-radius: 7px;
   background: #fff;
+}
+#rrs-member-status {
+  margin-bottom: 12px;
 }
 
 #file-input {

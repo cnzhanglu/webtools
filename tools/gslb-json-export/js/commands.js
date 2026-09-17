@@ -13,8 +13,8 @@
  *   → collectResourcesForDomains  (查 ADD、gpool、data_center 索引)
  *   → buildCreateCommands         (按顺序拼接命令行 + 收集 warnings)
  *   → { lines, warnings }
- *   当前域名成员启停：collectRrsMembers → buildRrsMemberPickerItems（按成员列出 IP/DC/VS/启停状态）
- *   → buildRrsMemberCommands（勾选/手工 IP 合并匹配，跨池按 dc*gmember_name 去重）
+ *   当前域名成员启停：collectRrsMembersForScope → buildRrsMemberPickerItems（按类型分组列出 IP/DC/VS/启停状态）
+ *   → buildRrsMemberCommandsForScope（勾选/手工 IP 联合匹配，在各真实记录内按 dc*gmember_name 去重）
  */
 var GslbCommands = (function () {
   'use strict';
@@ -508,27 +508,59 @@ var GslbCommands = (function () {
       + ' force';
   }
 
-  /**
-   * 将勾选与手工 IP 取并集后匹配当前域名成员，并为每个去重 ID 生成一条命令。
-   */
-  function buildRrsMemberCommands(jsonData, domainKey, selectedIps, manualIpsText, status, dcMemberIndex) {
-    var collected = collectRrsMembers(jsonData, domainKey, dcMemberIndex);
-    var warnings = collected.warnings.slice();
+  /** 按范围收集真实记录，联合模式固定按 A、AAAA 排序，各记录保留自己的 zone。 */
+  function collectRrsMembersForScope(jsonData, domainKey, scope, dcMemberIndex) {
+    var name = trim(domainKey && domainKey.name);
+    var type = trim(domainKey && domainKey.type).toLowerCase();
+    var records = [];
+    var warnings = [];
+    if (scope === 'dual' && type !== 'a' && type !== 'aaaa') {
+      return { records: records, warnings: warnings, error: '当前记录类型仅支持 A 或 AAAA' };
+    }
+    var types = scope === 'dual' ? ['a', 'aaaa'] : [type];
+    for (var i = 0; i < types.length; i++) {
+      var collected = collectRrsMembers(jsonData, { name: name, type: types[i] }, dcMemberIndex);
+      if (scope === 'dual' && !collected.domain) {
+        warnings.push('未在导出 JSON 中找到域名「' + name + '」的 ' + types[i].toUpperCase() + ' 记录，仅处理已存在的记录');
+        continue;
+      }
+      records.push({
+        name: name,
+        type: types[i],
+        zoneName: collected.zoneName,
+        members: collected.members
+      });
+      for (var j = 0; j < collected.warnings.length; j++) {
+        warnings.push(scope === 'dual'
+          ? types[i].toUpperCase() + '（zone：' + collected.zoneName + '）：' + collected.warnings[j]
+          : collected.warnings[j]);
+      }
+    }
+    return { records: records, warnings: warnings, error: '' };
+  }
+
+  /** IP 在全部目标记录中匹配一次，输出按记录分组，去重保留记录及 zone 边界。 */
+  function buildRrsMemberCommandsForRecords(records, selectedIps, manualIpsText, status, sourceWarnings) {
+    var warnings = sourceWarnings.slice();
     var requested = (selectedIps || []).concat(parseIpList(manualIpsText));
     var normalized = {};
     var requestedOrder = [];
-    var lines = [];
     var matched = [];
     var seenIds = {};
     var validStatus = trim(status).toLowerCase();
-    var type = trim(domainKey && domainKey.type).toLowerCase();
-    var i, rawIp, ip, hit, member;
+    var result = { lines: [], warnings: warnings, matched: matched, error: '' };
+    var linesByRecord = records.map(function () { return []; });
+    var i, r, rawIp, ip, hit, member, record, key;
 
     if (validStatus !== 'enable' && validStatus !== 'disable') {
-      return { lines: [], warnings: warnings, matched: [], members: collected.members, zoneName: collected.zoneName, error: '请选择 enable 或 disable' };
+      result.error = '请选择 enable 或 disable';
+      return result;
     }
-    if (type !== 'a' && type !== 'aaaa') {
-      return { lines: [], warnings: warnings, matched: [], members: collected.members, zoneName: collected.zoneName, error: '当前记录类型仅支持 A 或 AAAA' };
+    for (r = 0; r < records.length; r++) {
+      if (records[r].type !== 'a' && records[r].type !== 'aaaa') {
+        result.error = '当前记录类型仅支持 A 或 AAAA';
+        return result;
+      }
     }
 
     for (i = 0; i < requested.length; i++) {
@@ -542,41 +574,63 @@ var GslbCommands = (function () {
       }
     }
     if (!requestedOrder.length) {
-      return { lines: [], warnings: warnings, matched: [], members: collected.members, zoneName: collected.zoneName, error: '请勾选或手工输入至少一个成员 IP' };
+      result.error = '请勾选或手工输入至少一个成员 IP';
+      return result;
     }
 
     for (i = 0; i < requestedOrder.length; i++) {
       ip = requestedOrder[i];
       hit = false;
-      for (var j = 0; j < collected.members.length; j++) {
-        member = collected.members[j];
-        if (member.ip !== ip) continue;
-        hit = true;
-        if (!member.id) {
-          warnings.push('IP「' + normalized[ip] + '」命中成员但缺少数据中心名或成员名，无法构造 ID');
-        } else if (!seenIds[member.id]) {
-          seenIds[member.id] = true;
-          matched.push(member);
-          lines.push(buildRrsMemberModifyCommand(
-            collected.zoneName,
-            trim(domainKey.name),
-            type,
-            member.id,
-            validStatus
-          ));
+      for (r = 0; r < records.length; r++) {
+        record = records[r];
+        for (var j = 0; j < record.members.length; j++) {
+          member = record.members[j];
+          if (member.ip !== ip) continue;
+          hit = true;
+          key = record.zoneName + '\0' + record.name + '\0' + record.type + '\0' + member.id;
+          if (!member.id) {
+            warnings.push('IP「' + normalized[ip] + '」命中成员但缺少数据中心名或成员名，无法构造 ID');
+          } else if (!seenIds[key]) {
+            seenIds[key] = true;
+            matched.push(member);
+            linesByRecord[r].push(buildRrsMemberModifyCommand(
+              record.zoneName,
+              record.name,
+              record.type,
+              member.id,
+              validStatus
+            ));
+          }
         }
       }
       if (!hit) warnings.push('IP「' + normalized[ip] + '」未在当前域名成员中找到');
     }
 
-    return {
-      lines: lines,
-      warnings: warnings,
-      matched: matched,
-      members: collected.members,
-      zoneName: collected.zoneName,
-      error: ''
-    };
+    for (r = 0; r < linesByRecord.length; r++) result.lines = result.lines.concat(linesByRecord[r]);
+    return result;
+  }
+
+  /** 原单记录入口及返回结构保持兼容。 */
+  function buildRrsMemberCommands(jsonData, domainKey, selectedIps, manualIpsText, status, dcMemberIndex) {
+    var collected = collectRrsMembersForScope(jsonData, domainKey, 'current', dcMemberIndex);
+    var result = buildRrsMemberCommandsForRecords(collected.records, selectedIps, manualIpsText, status, collected.warnings);
+    result.members = collected.records[0].members;
+    result.zoneName = collected.records[0].zoneName;
+    return result;
+  }
+
+  /** 新范围入口：current 直接复用单记录接口，dual 返回各真实记录及联合生成结果。 */
+  function buildRrsMemberCommandsForScope(jsonData, domainKey, selectedIps, manualIpsText, status, dcMemberIndex, scope) {
+    if (scope !== 'dual') {
+      return buildRrsMemberCommands(jsonData, domainKey, selectedIps, manualIpsText, status, dcMemberIndex);
+    }
+    var collected = collectRrsMembersForScope(jsonData, domainKey, scope, dcMemberIndex);
+    if (collected.error) {
+      return { lines: [], warnings: collected.warnings, matched: [], records: collected.records, error: collected.error };
+    }
+    var result = buildRrsMemberCommandsForRecords(collected.records, selectedIps, manualIpsText, status, collected.warnings);
+    result.records = collected.records;
+    return result;
   }
 
   return {
@@ -592,8 +646,10 @@ var GslbCommands = (function () {
     parseIpList: parseIpList,
     findDomainWithZone: findDomainWithZone,
     collectRrsMembers: collectRrsMembers,
+    collectRrsMembersForScope: collectRrsMembersForScope,
     buildRrsMemberPickerItems: buildRrsMemberPickerItems,
     buildRrsMemberModifyCommand: buildRrsMemberModifyCommand,
-    buildRrsMemberCommands: buildRrsMemberCommands
+    buildRrsMemberCommands: buildRrsMemberCommands,
+    buildRrsMemberCommandsForScope: buildRrsMemberCommandsForScope
   };
 })();
