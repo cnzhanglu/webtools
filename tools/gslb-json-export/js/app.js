@@ -6,7 +6,7 @@
  *   → 点击查询/回车或表头列过滤（多列 AND）→ 单击表格行选中域名
  *   → 双击行或「查看关系图」打开近全屏弹窗 / 全量 CSV 或预览显示 CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
- *   → 选中单个域名 → 勾选成员（显示 IP / DC / VS）或输入 IP → 生成逐 ID 的 RRS 成员启停命令
+ *   → 选中单个域名 → 当前类型 / A+AAAA 联合 → 勾选成员或输入 IP → 生成逐 ID 的 RRS 成员启停命令
  *
  * 布局：表格始终可见；关系图仅在双击行或点击「查看关系图」时以弹窗打开，仅 × 关闭
  * 唯一键：域名名称 + 域名类型（name+type），与 commands.js 保持一致
@@ -103,6 +103,10 @@ var GslbApp = (function () {
     document.getElementById('btn-cmds-copy').addEventListener('click', copyCmds);
     document.getElementById('btn-cmds-download').addEventListener('click', downloadCmdsTxt);
     document.getElementById('btn-rrs-member').addEventListener('click', showRrsMemberModal);
+    document.getElementById('rrs-member-scope').addEventListener('change', renderRrsMemberScope);
+    document.getElementById('rrs-member-list').addEventListener('change', clearRrsMemberCommands);
+    document.getElementById('rrs-member-manual-ips').addEventListener('input', clearRrsMemberCommands);
+    document.getElementById('rrs-member-status').addEventListener('change', clearRrsMemberCommands);
     document.getElementById('btn-rrs-member-generate').addEventListener('click', generateRrsMemberCommands);
     document.getElementById('btn-rrs-member-copy').addEventListener('click', copyRrsMemberCommands);
     document.getElementById('btn-close-rrs-member').addEventListener('click', hideRrsMemberModal);
@@ -1096,18 +1100,25 @@ var GslbApp = (function () {
     BocUtils.downloadBlob(currentCmdsText, filename, 'text/plain;charset=utf-8');
   }
 
-  /** 清空并关闭旧成员命令，避免重新筛选、导入或切换域名后误用。 */
-  function resetRrsMemberModal() {
+  /** 选择或输入变化后，必须重新生成才能复制，避免复制过期命令。 */
+  function clearRrsMemberCommands() {
     currentRrsMemberText = '';
-    var overlay = document.getElementById('rrs-member-overlay');
-    if (!overlay) return;
-    overlay.classList.remove('visible');
-    document.getElementById('rrs-member-list').innerHTML = '';
-    document.getElementById('rrs-member-manual-ips').value = '';
     document.getElementById('rrs-member-warning').style.display = 'none';
     document.getElementById('rrs-member-warning').textContent = '';
     document.getElementById('rrs-member-pre').textContent = '';
     document.getElementById('btn-rrs-member-copy').disabled = true;
+  }
+
+  /** 清空并关闭旧成员命令，避免重新筛选、导入或切换域名后误用。 */
+  function resetRrsMemberModal() {
+    var overlay = document.getElementById('rrs-member-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('visible');
+    clearRrsMemberCommands();
+    document.getElementById('rrs-member-meta').textContent = '';
+    document.getElementById('rrs-member-scope').value = 'current';
+    document.getElementById('rrs-member-list').innerHTML = '';
+    document.getElementById('rrs-member-manual-ips').value = '';
   }
 
   /** 打开弹窗时从完整导出 JSON 收集当前域名成员，不依赖预览列是否包含 IP。 */
@@ -1118,9 +1129,41 @@ var GslbApp = (function () {
     }
 
     resetRrsMemberModal();
-    var collected = GslbCommands.collectRrsMembers(jsonData, selectedDomainKey, dcMemberIndex);
+    document.getElementById('rrs-member-scope').disabled = !/^(a|aaaa)$/i.test(selectedDomainKey.type);
+    renderRrsMemberScope();
+    document.getElementById('rrs-member-overlay').classList.add('visible');
+  }
+
+  /** 切换范围时重建分组列表，清空输入和结果；主表选择及过滤保持独立。 */
+  function renderRrsMemberScope() {
+    clearRrsMemberCommands();
+    document.getElementById('rrs-member-manual-ips').value = '';
+    var scope = document.getElementById('rrs-member-scope').value;
+    var collected = GslbCommands.collectRrsMembersForScope(jsonData, selectedDomainKey, scope, dcMemberIndex);
     var list = document.getElementById('rrs-member-list');
-    var items = GslbCommands.buildRrsMemberPickerItems(collected.members);
+    list.innerHTML = '';
+    for (var i = 0; i < collected.records.length; i++) {
+      var record = collected.records[i];
+      var items = GslbCommands.buildRrsMemberPickerItems(record.members);
+      var group = document.createElement('section');
+      group.className = 'rrs-member-group';
+      var heading = document.createElement('h3');
+      heading.className = 'rrs-member-group-title';
+      heading.textContent = record.type.toUpperCase() + '　zone：' + record.zoneName + '　' + items.length + ' 个成员';
+      group.appendChild(heading);
+      appendRrsMemberItems(group, items);
+      list.appendChild(group);
+    }
+    if (!collected.records.length) {
+      list.innerHTML = '<div class="rrs-member-empty">当前范围未找到域名记录。</div>';
+    }
+    document.getElementById('rrs-member-meta').textContent =
+      '域名：' + selectedDomainKey.name + '　范围：'
+      + (scope === 'dual' ? 'A+AAAA 联合' : '当前类型（' + selectedDomainKey.type + '）');
+    renderRrsMemberWarnings(collected.warnings, collected.error);
+  }
+
+  function appendRrsMemberItems(list, items) {
     var i, item, label, checkbox, textWrap, headEl, ipEl, statusEl, metaEl, dcText, vsText, poolText, memberText;
 
     for (i = 0; i < items.length; i++) {
@@ -1158,15 +1201,12 @@ var GslbApp = (function () {
       label.appendChild(textWrap);
       list.appendChild(label);
     }
-    if (!list.children.length) {
-      list.innerHTML = '<div class="rrs-member-empty">当前域名未找到可用的成员 IP，可在右侧手工输入后尝试匹配。</div>';
+    if (!items.length) {
+      var empty = document.createElement('div');
+      empty.className = 'rrs-member-empty';
+      empty.textContent = '该记录未找到可用的成员 IP。';
+      list.appendChild(empty);
     }
-
-    document.getElementById('rrs-member-meta').textContent =
-      '域名：' + selectedDomainKey.name + '　类型：' + selectedDomainKey.type
-      + '　zone：' + collected.zoneName;
-    renderRrsMemberWarnings(collected.warnings);
-    document.getElementById('rrs-member-overlay').classList.add('visible');
   }
 
   function hideRrsMemberModal() {
@@ -1187,13 +1227,14 @@ var GslbApp = (function () {
     var selectedIps = [];
     for (var i = 0; i < checkboxes.length; i++) selectedIps.push(checkboxes[i].value);
 
-    var result = GslbCommands.buildRrsMemberCommands(
+    var result = GslbCommands.buildRrsMemberCommandsForScope(
       jsonData,
       selectedDomainKey,
       selectedIps,
       document.getElementById('rrs-member-manual-ips').value,
       document.getElementById('rrs-member-status').value,
-      dcMemberIndex
+      dcMemberIndex,
+      document.getElementById('rrs-member-scope').value
     );
     currentRrsMemberText = result.lines.join('\n');
     document.getElementById('rrs-member-pre').textContent = currentRrsMemberText;

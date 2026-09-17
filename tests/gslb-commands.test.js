@@ -482,4 +482,144 @@ module.exports = function (test, assert, assertEq) {
     assert(result.warnings.some(function (w) { return w.indexOf('未在当前域名成员中找到') !== -1; }));
     assert(result.warnings.some(function (w) { return w.indexOf('无法构造 ID') !== -1; }));
   });
+
+  function buildDual(data, selected, manual, status, type) {
+    return GslbCommands.buildRrsMemberCommandsForScope(
+      data, { name: 'app.example.com.', type: type || 'A' },
+      selected, manual, status || 'disable', GslbProcess.buildDcMemberIndex(data), 'dual'
+    );
+  }
+
+  test('RRS 联合：收集同名 A/AAAA，保留各自 zone，排除其他域名', function () {
+    var data = JSON.parse(JSON.stringify(RRS_MEMBER_FIXTURE));
+    data.ADD['prod.example'].push({ name: 'other.example.', type: 'A', gpool_list: [] });
+    var collected = GslbCommands.collectRrsMembersForScope(
+      data, { name: 'app.example.com.', type: 'AAAA' }, 'dual', GslbProcess.buildDcMemberIndex(data)
+    );
+    assertEq(collected.records.length, 2);
+    assertEq(collected.records[0].type, 'a');
+    assertEq(collected.records[0].zoneName, 'prod.example');
+    assertEq(collected.records[0].members.length, 4);
+    assertEq(collected.records[1].type, 'aaaa');
+    assertEq(collected.records[1].zoneName, 'v6.example');
+    assertEq(collected.records[1].members[0].ip, '2001:db8::1');
+    assertEq(collected.warnings.length, 0);
+  });
+
+  test('RRS 联合：混合勾选及手工输入，始终先 A 后 AAAA，跨池 ID 去重', function () {
+    var result = buildDual(RRS_MEMBER_FIXTURE, ['2001:db8::1', '192.0.2.10'], '198.51.100.20，192.0.2.10', 'enable', 'AAAA');
+    assertEq(result.error, '');
+    assertEq(result.warnings.length, 0);
+    assertEq(result.lines.length, 4);
+    assertEq(result.lines[0], 'modify gslb rrs-member zone-name prod.example record-name app.example.com. type a pool-member id dc_a*gm_shared status enable force');
+    assert(result.lines[1].indexOf('pool-member id dc_b*gm_same_ip') !== -1, '同 IP 不同成员均输出');
+    assert(result.lines[2].indexOf('pool-member id dc_c*gm_fallback') !== -1, '缺 IP 时回退 DC 成员');
+    assertEq(result.lines[3], 'modify gslb rrs-member zone-name v6.example record-name app.example.com. type aaaa pool-member id dc_v6*gm_v6 status enable force');
+  });
+
+  test('RRS 联合：纯 IPv4 或纯 IPv6 输入不在另一类型产生未命中警告', function () {
+    var v4 = buildDual(RRS_MEMBER_FIXTURE, ['192.0.2.10'], '');
+    var v6 = buildDual(RRS_MEMBER_FIXTURE, [], '2001:0db8:0:0:0:0:0:1;2001:db8::1');
+    assertEq(v4.lines.length, 2);
+    assertEq(v6.lines.length, 1);
+    assertEq(v4.warnings.length, 0);
+    assertEq(v6.warnings.length, 0);
+    assert(v6.lines[0].indexOf(' type aaaa ') !== -1);
+  });
+
+  test('RRS 联合：跨类型相同成员 ID 保留两条命令（同 zone 或不同 zone）', function () {
+    [false, true].forEach(function (sameZone) {
+      var data = JSON.parse(JSON.stringify(RRS_MEMBER_FIXTURE));
+      data.gpool[2].gmember_list[0].dc_name = 'dc_a';
+      data.gpool[2].gmember_list[0].gmember_name = 'gm_shared';
+      if (sameZone) {
+        data.ADD['prod.example'].push(data.ADD['v6.example'][0]);
+        delete data.ADD['v6.example'];
+      }
+      var result = buildDual(data, [], '192.0.2.10 2001:db8::1');
+      var shared = result.lines.filter(function (line) { return line.indexOf('pool-member id dc_a*gm_shared') !== -1; });
+      assertEq(shared.length, 2);
+      assert(shared[0].indexOf(' type a ') !== -1);
+      assert(shared[1].indexOf(' type aaaa ') !== -1);
+      assert(shared[1].indexOf('zone-name ' + (sameZone ? 'prod.example' : 'v6.example')) !== -1);
+    });
+  });
+
+  test('RRS 联合：只有 A 或 AAAA 时提示缺失类型并生成已有记录', function () {
+    ['A', 'AAAA'].forEach(function (type) {
+      var data = JSON.parse(JSON.stringify(RRS_MEMBER_FIXTURE));
+      delete data.ADD[type === 'A' ? 'v6.example' : 'prod.example'];
+      var result = buildDual(data, [], type === 'A' ? '192.0.2.10' : '2001:db8::1', 'disable', type);
+      assertEq(result.error, '');
+      assertEq(result.lines.length, type === 'A' ? 2 : 1);
+      assertEq(result.warnings.length, 1);
+      assert(result.warnings[0].indexOf(type === 'A' ? 'AAAA 记录' : 'A 记录') !== -1);
+      assertEq(result.records.length, 1);
+    });
+  });
+
+  test('RRS 联合：ADD 数组仍分别生成双栈命令，zone 回退 @', function () {
+    var data = JSON.parse(JSON.stringify(RRS_MEMBER_FIXTURE));
+    data.ADD = data.ADD['v6.example'].concat(data.ADD['prod.example']);
+    var result = buildDual(data, [], '2001:db8::1 192.0.2.10');
+    assertEq(result.lines.length, 3);
+    assert(result.lines.every(function (line) { return line.indexOf('zone-name @ ') !== -1; }));
+    assert(result.lines[0].indexOf(' type a ') !== -1);
+    assert(result.lines[2].indexOf(' type aaaa ') !== -1);
+  });
+
+  test('RRS 联合：非法、未命中和无 ID 警告统一报告，不影响有效命令', function () {
+    var result = buildDual(RRS_MEMBER_FIXTURE, ['192.0.2.99'], 'bad-ip 203.0.113.254 2001:db8::1');
+    assertEq(result.lines.length, 1);
+    assertEq(result.warnings.length, 3);
+    assert(result.warnings.some(function (w) { return w.indexOf('无法解析') !== -1; }));
+    assert(result.warnings.some(function (w) { return w.indexOf('未在当前域名成员中找到') !== -1; }));
+    assert(result.warnings.some(function (w) { return w.indexOf('无法构造 ID') !== -1; }));
+  });
+
+  test('RRS 联合：缺少池的警告包含所属类型和 zone，另一侧仍能生成', function () {
+    var data = JSON.parse(JSON.stringify(RRS_MEMBER_FIXTURE));
+    data.ADD['prod.example'][0].gpool_list = [{ gpool_name: 'missing' }];
+    var result = buildDual(data, [], '2001:db8::1');
+    assertEq(result.lines.length, 1);
+    assertEq(result.warnings.length, 1);
+    assert(result.warnings[0].indexOf('A（zone：prod.example）') !== -1);
+    assert(result.warnings[0].indexOf('missing') !== -1);
+  });
+
+  test('RRS 联合：无记录、空成员或无可用 IP 时无命令', function () {
+    var absent = buildDual({ ADD: [] }, [], '192.0.2.10');
+    assertEq(absent.lines.length, 0);
+    assertEq(absent.records.length, 0);
+    assertEq(absent.warnings.length, 3);
+    var data = JSON.parse(JSON.stringify(RRS_MEMBER_FIXTURE));
+    data.gpool = [];
+    assertEq(buildDual(data, [], '192.0.2.10').lines.length, 0);
+    data.gpool = [{ name: 'pool_v6', gmember_list: [{ dc_name: 'dc', gmember_name: 'gm', ip: 'bad-ip' }] }];
+    var result = buildDual(data, [], '2001:db8::1');
+    assertEq(GslbCommands.buildRrsMemberPickerItems(result.records[1].members).length, 0);
+    assertEq(result.lines.length, 0);
+  });
+
+  test('RRS 联合：空输入、非法状态与非 A/AAAA 记录被拒绝', function () {
+    assertEq(buildDual(RRS_MEMBER_FIXTURE, [], '').error, '请勾选或手工输入至少一个成员 IP');
+    assertEq(buildDual(RRS_MEMBER_FIXTURE, [], '192.0.2.10', 'invalid').error, '请选择 enable 或 disable');
+    var result = buildDual(RRS_MEMBER_FIXTURE, [], '192.0.2.10', 'enable', 'CNAME');
+    assertEq(result.error, '当前记录类型仅支持 A 或 AAAA');
+    assertEq(result.lines.length, 0);
+  });
+
+  test('RRS 范围入口：current 保留单记录结果与返回结构，默认仍为当前类型', function () {
+    ['A', 'AAAA'].forEach(function (type) {
+      var args = [RRS_MEMBER_FIXTURE, { name: 'app.example.com.', type: type },
+        [], '192.0.2.10 2001:db8::1', 'disable', GslbProcess.buildDcMemberIndex(RRS_MEMBER_FIXTURE)];
+      var expected = GslbCommands.buildRrsMemberCommands.apply(null, args);
+      var current = GslbCommands.buildRrsMemberCommandsForScope.apply(null, args.concat('current'));
+      var defaultScope = GslbCommands.buildRrsMemberCommandsForScope.apply(null, args);
+      assertEq(JSON.stringify(current), JSON.stringify(expected));
+      assertEq(JSON.stringify(defaultScope), JSON.stringify(expected));
+      assertEq(Object.keys(current).sort().join(','), 'error,lines,matched,members,warnings,zoneName');
+      assert(current.lines.every(function (line) { return line.indexOf(' type ' + type.toLowerCase() + ' ') !== -1; }));
+    });
+  });
 };
