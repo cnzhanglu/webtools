@@ -299,10 +299,16 @@ module.exports = function (test, assert, assertEq) {
       '每列应提供组件内置匹配方式');
     assert(app.indexOf('filterRowsByColumns') === -1, '不应再调用自研列过滤');
     assert(processJs.indexOf('filterRowsByColumns') === -1, '核心层不应再保留自研列过滤');
-    assert(sw.indexOf('webtools-v55') !== -1, '引入表格组件后应递增缓存版本');
+    assert(sw.indexOf('webtools-v57') !== -1, 'PWA 缓存策略变更后应递增缓存版本');
     assert(sw.indexOf('./shared/vendor/ag-grid/ag-grid-community.min.noStyle.js') !== -1, '应预缓存表格脚本');
     assert(sw.indexOf('./shared/vendor/ag-grid/ag-grid.css') !== -1, '应预缓存表格基础样式');
     assert(sw.indexOf('./shared/vendor/ag-grid/ag-theme-alpine.css') !== -1, '应预缓存表格主题');
+    assert(html.indexOf('vis-network.min.js') !== -1, '应本地加载 vis-network');
+    assert(sw.indexOf('./shared/vendor/vis-network/vis-network.min.js') !== -1, '应预缓存关系图脚本');
+    var graphJs = fs.readFileSync(path.join(__dirname, '../tools/gslb-json-export/js/graph.js'), 'utf8');
+    assert(graphJs.indexOf('new vis.Network') !== -1, '关系图应使用 vis.Network 绘制');
+    assert(graphJs.indexOf("direction: 'LR'") !== -1, '关系图应为从左到右的分层布局');
+    assert(app.indexOf('gridApi.getDataAsCsv') !== -1, '显示 CSV 应使用表格组件导出');
     assert(html.indexOf('id="btn-export-display"') !== -1, '预览区应有导出显示 CSV 按钮');
     assert(html.indexOf('导出全量 CSV') !== -1, '顶部导出按钮应标明全量');
     assert(app.indexOf('gslb_export_display_') !== -1, '显示 CSV 文件名前缀应为 gslb_export_display_');

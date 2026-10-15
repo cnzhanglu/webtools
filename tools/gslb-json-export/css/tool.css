@@ -317,15 +317,10 @@
   min-height: 0;
   height: 100%;
   background: #f8fafc;
-  cursor: grab;
   position: relative;
 }
-.graph-svg-wrap.panning {
-  cursor: grabbing;
-}
 
-.graph-svg-wrap svg {
-  display: block;
+.graph-network {
   width: 100%;
   height: 100%;
 }
@@ -335,66 +330,6 @@
   text-align: center;
   padding: 80px 20px;
   font-size: .9rem;
-}
-
-.graph-node {
-  cursor: pointer;
-}
-.graph-node.dimmed {
-  opacity: 0.25;
-}
-.graph-node.highlight rect {
-  filter: drop-shadow(0 0 4px rgba(37, 99, 168, 0.5));
-}
-.graph-node.selected rect {
-  stroke-width: 3;
-}
-
-/* 禁用节点始终保留灰化与红色虚线语义，高亮/选中只增强线宽和阴影。 */
-.graph-node.disabled rect {
-  fill: #f1f5f9;
-  stroke: #dc2626;
-  stroke-dasharray: 7 5;
-}
-.graph-node.disabled text {
-  fill: #64748b;
-}
-.graph-node.disabled.highlight rect {
-  stroke: #dc2626;
-  filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.4));
-}
-
-.graph-node-title {
-  font-size: 13px;
-  font-weight: 700;
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-.graph-node-sub {
-  font-size: 11px;
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-
-.graph-edge.dimmed {
-  opacity: 0.15;
-}
-.graph-edge.highlight path {
-  stroke: #2563a8;
-  stroke-width: 2.5;
-}
-.graph-edge.disabled path,
-.graph-edge.disabled.highlight path {
-  stroke: #dc2626;
-  stroke-width: 2;
-  stroke-dasharray: 7 5;
-}
-.graph-edge.disabled .graph-edge-label {
-  fill: #b91c1c;
-}
-
-.graph-edge-label {
-  font-size: 10px;
-  fill: #64748b;
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .graph-detail {

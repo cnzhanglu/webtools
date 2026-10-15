@@ -695,13 +695,28 @@ var GslbApp = (function () {
     }
 
     syncDisplayRows();
-    var rows = displayRows;
-    if (!rows.length) {
+    if (!displayRows.length) {
       alert('当前无显示数据，请先预览或调整过滤条件。');
       return;
     }
+    if (!gridApi || !gridApi.getDataAsCsv) {
+      alert('预览表尚未就绪。');
+      return;
+    }
 
-    var csvContent = GslbProcess.buildCsvContent(previewColumns, rows);
+    // 表头用字段中文名；getDataAsCsv 只导出当前过滤后的行。
+    var csvContent = gridApi.getDataAsCsv({
+      columnKeys: previewColumns,
+      processHeaderCallback: function (params) {
+        var col = params && params.column;
+        var id = col && col.getColId ? col.getColId() : '';
+        return GslbFields.keyToCn(id);
+      }
+    });
+    if (!csvContent) {
+      alert('当前无显示数据，请先预览或调整过滤条件。');
+      return;
+    }
     var filename = 'gslb_export_display_' + new Date().toISOString().slice(0, 10) + '.csv';
     BocUtils.downloadBlob('\uFEFF' + csvContent, filename, 'text/csv;charset=utf-8');
     alert('已导出显示 CSV：' + filename);
