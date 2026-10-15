@@ -2,13 +2,14 @@
  * GSLB JSON 导出 — UI 交互层
  *
  * 数据流：
- *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → 虚拟滚动预览表
- *   → 点击查询/回车或表头列过滤（多列 AND）→ 单击表格行选中域名
+ *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → AG Grid 预览
+ *   → 列头过滤图标打开该列自己的匹配菜单（多列 AND）→ 单击行选中域名
  *   → 双击行或「查看关系图」打开近全屏弹窗 / 全量 CSV 或预览显示 CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
  *   → 选中单个域名 → 当前类型 / A+AAAA 联合 → 勾选成员或输入 IP → 生成逐 ID 的 RRS 成员启停命令
  *
  * 布局：表格始终可见；关系图仅在双击行或点击「查看关系图」时以弹窗打开，仅 × 关闭
+ * 过滤：匹配方式由 AG Grid 文本过滤器提供，平时只显示列头图标
  * 唯一键：域名名称 + 域名类型（name+type），与 commands.js 保持一致
  *
  * 模块分工：GslbFields（方案）、GslbTransfer（选列）、GslbProcess（行数据）、
@@ -26,26 +27,36 @@ var GslbApp = (function () {
   var displayRows = [];
   /** 当前选中的域名唯一键；name+type 共同确定一条域名记录 */
   var selectedDomainKey = { name: '', type: '' };
-  var selectedRowIndices = {};
-  var filterState = { match: 'contains', columns: {} };
+  /** Ctrl/Cmd 点选后为 true，复制只取这些行；普通单击复制该域名全部可见行 */
+  var explicitRowSelection = false;
   var currentRrsMemberText = '';
-  var filterTimer = null;
-  var FILTER_DEBOUNCE_MS = 300;
+  var gridOptions = null;
+  var gridApi = null;
+  var gridColumnApi = null;
 
   var groupDomain = null;
   var groupPool = null;
   var groupMember = null;
 
-  /** 虚拟滚动：默认行高（首次渲染后按实测值修正） */
-  var ROW_HEIGHT = 34;
-  var measuredRowHeight = 0;
-  var VIRTUAL_OVERSCAN = 6;
-  var scrollRaf = null;
-  /** 冻结列宽（px）；仅预览/过滤后重测，滚动不重测；拖动手柄可改宽 */
-  var previewColumnWidths = [];
-  var colResizeState = null;
-  var colResizeBound = false;
-  var PREVIEW_COL_MIN = 88;
+  /** 每列过滤器只暴露组件自带的文本匹配，不另写比较规则。 */
+  var GRID_FILTER_OPTIONS = ['contains', 'notContains', 'equals', 'notEqual', 'startsWith', 'endsWith'];
+  var GRID_LOCALE = {
+    applyFilter: '应用',
+    clearFilter: '清除',
+    resetFilter: '重置',
+    cancelFilter: '取消',
+    textFilter: '文本过滤',
+    filterOoo: '过滤…',
+    empty: '请选择',
+    equals: '等于',
+    notEqual: '不等于',
+    contains: '包含',
+    notContains: '不包含',
+    startsWith: '开头是',
+    endsWith: '结尾是',
+    andCondition: '并且',
+    orCondition: '或者'
+  };
 
   function init() {
     pref = GslbFields.loadPref();
@@ -120,8 +131,6 @@ var GslbApp = (function () {
       refreshFieldLists();
     });
 
-    document.getElementById('btn-filter-query').addEventListener('click', onFilterQuery);
-    document.getElementById('filter-match').addEventListener('change', onFilterQuery);
     document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
 
     document.getElementById('btn-view-graph').addEventListener('click', viewSelectedDomainGraph);
@@ -141,8 +150,10 @@ var GslbApp = (function () {
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         var sel = window.getSelection();
         if (sel && String(sel).length) return;
-        var table = document.getElementById('preview-table');
-        if (document.activeElement && table.contains(document.activeElement)) {
+        var active = document.activeElement;
+        var gridEl = document.getElementById('preview-grid');
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+        if (active && gridEl && gridEl.contains(active)) {
           copySelection();
           e.preventDefault();
         }
@@ -154,8 +165,7 @@ var GslbApp = (function () {
     updateRrsMemberButton();
     updateGenCmdsButton();
     updateExportDisplayButton();
-    bindVirtualScroll();
-    bindPreviewColResize();
+    ensurePreviewGrid();
     setStatus('状态：尚未加载 JSON');
   }
 
@@ -185,97 +195,208 @@ var GslbApp = (function () {
       : '请先在表格中点击一行选择域名';
   }
 
-  /** 从表头过滤框读取条件并执行过滤；过滤后清空选中与关系图弹窗 */
-  function onFilterQuery() {
-    syncFilterFromInputs();
-    clearSelectionAndGraph();
-    applyFilterAndRender();
+  function noRowsHtml(text) {
+    return '<span class="gslb-grid-empty">' + text + '</span>';
   }
 
-  function scheduleFilter() {
-    if (filterTimer) clearTimeout(filterTimer);
-    filterTimer = setTimeout(function () {
-      filterTimer = null;
-      onFilterQuery();
-    }, FILTER_DEBOUNCE_MS);
+  /** 创建一次预览网格；列过滤、虚拟滚动和列宽拖动都交给 AG Grid。 */
+  function ensurePreviewGrid() {
+    var el;
+    if (gridApi) return;
+    el = document.getElementById('preview-grid');
+    gridOptions = {
+      suppressFieldDotNotation: true,
+      suppressMenuHide: true,
+      suppressDragLeaveHidesColumns: true,
+      enableCellTextSelection: true,
+      ensureDomOrder: true,
+      enableBrowserTooltips: true,
+      tooltipShowDelay: 300,
+      animateRows: false,
+      headerHeight: 36,
+      rowHeight: 32,
+      rowSelection: 'multiple',
+      suppressRowClickSelection: true,
+      suppressLoadingOverlay: true,
+      overlayNoRowsTemplate: noRowsHtml('导入 JSON 并点击「预览」查看数据'),
+      localeText: GRID_LOCALE,
+      icons: {
+        menu: '<span class="ag-icon ag-icon-filter" unselectable="on"></span>'
+      },
+      defaultColDef: {
+        resizable: true,
+        sortable: false,
+        filter: 'agTextColumnFilter',
+        menuTabs: ['filterMenuTab'],
+        minWidth: 96,
+        filterParams: {
+          filterOptions: GRID_FILTER_OPTIONS,
+          defaultOption: 'contains',
+          debounceMs: 200
+        },
+        tooltipValueGetter: previewCellTooltip
+      },
+      columnDefs: [],
+      rowData: [],
+      rowClassRules: {
+        'gslb-disabled-row': function (params) {
+          return !!(params.data && params.data._disabled);
+        }
+      },
+      onFilterChanged: onGridFilterChanged,
+      onRowClicked: onGridRowClicked,
+      onRowDoubleClicked: onGridRowDoubleClicked
+    };
+    new agGrid.Grid(el, gridOptions);
+    gridApi = gridOptions.api;
+    gridColumnApi = gridOptions.columnApi;
+  }
+
+  function previewCellTooltip(params) {
+    var data = params.data || {};
+    var text = params.value === null || params.value === undefined ? '' : String(params.value);
+    var reason;
+    if (!data._disabled) return text;
+    reason = (data._disabledReasons || []).join('；');
+    return text ? ('禁用：' + reason + '\n' + text) : ('禁用：' + reason);
+  }
+
+  function buildPreviewColumnDefs(columns) {
+    var defs = [];
+    var i;
+    for (i = 0; i < columns.length; i++) {
+      defs.push({
+        colId: columns[i],
+        field: columns[i],
+        headerName: GslbFields.keyToCn(columns[i]),
+        headerTooltip: '过滤'
+      });
+    }
+    return defs;
+  }
+
+  /** 字段重选后只保留仍显示列的过滤模型，列与列之间仍由组件按 AND 组合。 */
+  function pruneFilterModel(model, columns) {
+    var next = {};
+    var i;
+    var key;
+    model = model || {};
+    for (i = 0; i < columns.length; i++) {
+      key = columns[i];
+      if (model[key]) next[key] = model[key];
+    }
+    return next;
+  }
+
+  function domainOfRow(row) {
+    row = row || {};
+    return {
+      name: row._domainName || row['domain.name'] || '',
+      type: row._domainType !== undefined ? row._domainType : (row['domain.type'] || '')
+    };
+  }
+
+  function selectDomainFromData(row) {
+    var domain = domainOfRow(row);
+    if (!domain.name) return;
+    selectedDomainKey = domain;
+    updateViewGraphButton();
+    updateRrsMemberButton();
+    resetRrsMemberModal();
+  }
+
+  function onGridRowClicked(event) {
+    var mouse;
+    var selected;
+    if (!event.data || !event.node) return;
+    mouse = event.event;
+    if (mouse && (mouse.ctrlKey || mouse.metaKey)) {
+      selected = !event.node.isSelected();
+      event.node.setSelected(selected);
+      explicitRowSelection = true;
+      if (selected) {
+        selectDomainFromData(event.data);
+      } else if (domainOfRow(event.data).name === selectedDomainKey.name &&
+                 domainOfRow(event.data).type === selectedDomainKey.type) {
+        selectedDomainKey = { name: '', type: '' };
+        updateViewGraphButton();
+        updateRrsMemberButton();
+        resetRrsMemberModal();
+        hideGraphModal();
+      }
+      return;
+    }
+    explicitRowSelection = false;
+    gridApi.deselectAll();
+    event.node.setSelected(true);
+    selectDomainFromData(event.data);
+  }
+
+  function onGridRowDoubleClicked(event) {
+    if (!event.data) return;
+    explicitRowSelection = false;
+    gridApi.deselectAll();
+    event.node.setSelected(true);
+    selectDomainFromData(event.data);
+    viewSelectedDomainGraph();
+  }
+
+  function onGridFilterChanged() {
+    if (!gridApi) return;
+    explicitRowSelection = false;
+    selectedDomainKey = { name: '', type: '' };
+    gridApi.deselectAll();
+    updateViewGraphButton();
+    updateRrsMemberButton();
+    resetRrsMemberModal();
+    hideGraphModal();
+    syncDisplayRows();
   }
 
   function clearFilter() {
-    filterState.columns = {};
-    filterState.match = 'contains';
-    document.getElementById('filter-match').value = 'contains';
-    var inputs = document.querySelectorAll('#preview-head .col-filter-input');
-    var i;
-    for (i = 0; i < inputs.length; i++) inputs[i].value = '';
     clearSelectionAndGraph();
-    applyFilterAndRender();
+    if (gridApi) gridApi.setFilterModel(null);
+    syncDisplayRows();
   }
 
   /** 清空行选中状态并关闭关系图弹窗 */
   function clearSelectionAndGraph() {
     selectedDomainKey = { name: '', type: '' };
-    selectedRowIndices = {};
+    explicitRowSelection = false;
+    if (gridApi) gridApi.deselectAll();
     updateViewGraphButton();
     updateRrsMemberButton();
     resetRrsMemberModal();
     hideGraphModal();
   }
 
-  function syncFilterFromInputs() {
-    filterState.match = document.getElementById('filter-match').value;
-    var inputs = document.querySelectorAll('#preview-head .col-filter-input');
-    var next = {};
-    var i;
-    var col;
-    for (i = 0; i < inputs.length; i++) {
-      col = inputs[i].getAttribute('data-col');
-      if (col) next[col] = inputs[i].value;
-    }
-    filterState.columns = next;
-  }
-
   function hasActiveColumnFilters() {
+    var model;
     var k;
-    for (k in filterState.columns) {
-      if (Object.prototype.hasOwnProperty.call(filterState.columns, k) &&
-          String(filterState.columns[k] || '').trim()) {
-        return true;
-      }
+    var item;
+    if (!gridApi) return false;
+    model = gridApi.getFilterModel() || {};
+    for (k in model) {
+      if (!Object.prototype.hasOwnProperty.call(model, k)) continue;
+      item = model[k];
+      if (!item) continue;
+      if (item.operator || item.condition1 || item.conditions) return true;
+      if (String(item.filter || '').length) return true;
     }
     return false;
   }
 
-  /** 列变更后只保留仍展示列上的过滤条件，避免隐藏列继续参与 AND。 */
-  function pruneColumnFilters(columns) {
-    var next = {};
-    var i;
-    var key;
-    for (i = 0; i < columns.length; i++) {
-      key = columns[i];
-      if (filterState.columns[key] !== undefined) next[key] = filterState.columns[key];
+  /** 过滤后的可见行供徽标、显示 CSV 和创建命令共用。 */
+  function syncDisplayRows() {
+    var rows = [];
+    if (gridApi && previewColumns.length) {
+      gridApi.forEachNodeAfterFilter(function (node) {
+        if (node.data) rows.push(node.data);
+      });
     }
-    filterState.columns = next;
-  }
-
-  function bindVirtualScroll() {
-    var scrollEl = document.getElementById('preview-scroll');
-    if (!scrollEl || scrollEl._vsBound) return;
-    scrollEl._vsBound = true;
-    scrollEl.addEventListener('scroll', onPreviewScroll);
-  }
-
-  function onPreviewScroll() {
-    if (!displayRows.length) return;
-    if (scrollRaf) return;
-    scrollRaf = requestAnimationFrame(function () {
-      scrollRaf = null;
-      renderVirtualSlice();
-    });
-  }
-
-  function resetPreviewScroll() {
-    var scrollEl = document.getElementById('preview-scroll');
-    if (scrollEl) scrollEl.scrollTop = 0;
+    displayRows = rows;
+    updatePreviewBadge(rows.length, previewRows.length);
+    updateExportDisplayButton();
   }
 
   /**
@@ -326,348 +447,6 @@ var GslbApp = (function () {
     }
   }
 
-  function buildTableRow(row, columns, rowIndex) {
-    var tr = document.createElement('tr');
-    var domainName = row._domainName || row['domain.name'] || '';
-    var domainType = row._domainType !== undefined ? row._domainType : (row['domain.type'] || '');
-    if (row._disabled) {
-      var disabledReason = (row._disabledReasons || []).join('；');
-      tr.classList.add('disabled-row');
-      tr.title = '禁用：' + disabledReason;
-      tr.setAttribute('data-disabled-reason', disabledReason);
-    }
-    if (domainName) {
-      tr.setAttribute('data-domain', domainName);
-      tr.setAttribute('data-domain-type', domainType);
-    }
-    if (rowIndex !== undefined && rowIndex !== null) {
-      tr.setAttribute('data-row-index', String(rowIndex));
-      if (selectedRowIndices[String(rowIndex)]) tr.classList.add('selected');
-    }
-    var c;
-    for (c = 0; c < columns.length; c++) {
-      var td = document.createElement('td');
-      var val = row[columns[c]];
-      td.textContent = val === null || val === undefined ? '' : String(val);
-      td.title = row._disabled
-        ? '禁用：' + disabledReason + (td.textContent ? '\n' + td.textContent : '')
-        : td.textContent;
-      tr.appendChild(td);
-    }
-    return tr;
-  }
-
-  function appendSpacerRow(height, colSpan) {
-    var tr = document.createElement('tr');
-    tr.className = 'virtual-spacer';
-    tr.setAttribute('aria-hidden', 'true');
-    var td = document.createElement('td');
-    td.colSpan = colSpan;
-    td.style.height = height + 'px';
-    tr.appendChild(td);
-    return tr;
-  }
-
-  /** 首次有数据时测量真实行高，供虚拟滚动计算可视窗口 */
-  function ensureRowHeight(columns, sampleRow) {
-    if (measuredRowHeight > 0) return;
-    var tbody = document.getElementById('preview-body');
-    var tr = buildTableRow(sampleRow, columns);
-    tr.style.visibility = 'hidden';
-    tbody.appendChild(tr);
-    measuredRowHeight = tr.offsetHeight || ROW_HEIGHT;
-    tbody.removeChild(tr);
-  }
-
-  /** 按滚动位置仅渲染可视区行 + 上下占位，避免全量 DOM */
-  function renderVirtualSlice() {
-    var scrollEl = document.getElementById('preview-scroll');
-    var tbody = document.getElementById('preview-body');
-    var columns = previewColumns;
-    var rows = displayRows;
-    var total = rows.length;
-    var rowHeight = measuredRowHeight || ROW_HEIGHT;
-    var scrollTop = scrollEl ? scrollEl.scrollTop : 0;
-    var viewHeight = scrollEl ? scrollEl.clientHeight : 420;
-    var start = Math.floor(scrollTop / rowHeight) - VIRTUAL_OVERSCAN;
-    var visibleCount;
-    var end;
-    var frag;
-    var topHeight;
-    var bottomHeight;
-    var i;
-
-    if (start < 0) start = 0;
-    visibleCount = Math.ceil(viewHeight / rowHeight) + VIRTUAL_OVERSCAN * 2;
-    end = start + visibleCount;
-    if (end > total) end = total;
-
-    frag = document.createDocumentFragment();
-    topHeight = start * rowHeight;
-    if (topHeight > 0) frag.appendChild(appendSpacerRow(topHeight, columns.length));
-
-    for (i = start; i < end; i++) {
-      frag.appendChild(buildTableRow(rows[i], columns, i));
-    }
-
-    bottomHeight = (total - end) * rowHeight;
-    if (bottomHeight > 0) frag.appendChild(appendSpacerRow(bottomHeight, columns.length));
-
-    tbody.innerHTML = '';
-    tbody.appendChild(frag);
-    restoreRowSelection();
-  }
-
-  function labelForPreviewColumn(colKey) {
-    return GslbFields.keyToCn(colKey);
-  }
-
-  /** 浏览器端可选 canvas 测量；无 canvas 时回退到 process 内估算 */
-  function createCanvasMeasureText() {
-    try {
-      var canvas = document.createElement('canvas');
-      var ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      ctx.font = '600 .82rem "PingFang SC", "Microsoft YaHei", sans-serif';
-      return function (text) {
-        return ctx.measureText(text === null || text === undefined ? '' : String(text)).width;
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function measurePreviewColumnWidths() {
-    var measureFn = createCanvasMeasureText();
-    return GslbProcess.measurePreviewColumnWidths(
-      previewColumns,
-      displayRows,
-      labelForPreviewColumn,
-      measureFn
-    );
-  }
-
-  function applyPreviewColgroup(widths) {
-    var colgroup = document.getElementById('preview-cols');
-    var table = document.getElementById('preview-table');
-    var i;
-    var col;
-    var total = 0;
-    if (!colgroup) return;
-    colgroup.innerHTML = '';
-    for (i = 0; i < widths.length; i++) {
-      col = document.createElement('col');
-      col.style.width = widths[i] + 'px';
-      colgroup.appendChild(col);
-      total += widths[i];
-    }
-    if (table && widths.length) {
-      table.style.width = Math.max(total, 0) + 'px';
-    } else if (table) {
-      table.style.width = '';
-    }
-  }
-
-  /** 预览或过滤后重算列宽；虚拟滚动 renderVirtualSlice 不调用 */
-  function syncPreviewColumnWidths() {
-    if (!previewColumns.length) {
-      previewColumnWidths = [];
-      applyPreviewColgroup([]);
-      return;
-    }
-    previewColumnWidths = measurePreviewColumnWidths();
-    applyPreviewColgroup(previewColumnWidths);
-  }
-
-  function setPreviewColWidth(colIndex, widthPx) {
-    var colgroup = document.getElementById('preview-cols');
-    var table = document.getElementById('preview-table');
-    var cols;
-    var i;
-    var total;
-    if (!previewColumnWidths.length || colIndex < 0 || colIndex >= previewColumnWidths.length) return;
-    previewColumnWidths[colIndex] = widthPx;
-    cols = colgroup ? colgroup.querySelectorAll('col') : [];
-    if (cols[colIndex]) cols[colIndex].style.width = widthPx + 'px';
-    if (table) {
-      total = 0;
-      for (i = 0; i < previewColumnWidths.length; i++) total += previewColumnWidths[i];
-      table.style.width = total + 'px';
-    }
-  }
-
-  function bindPreviewColResize() {
-    if (colResizeBound) return;
-    colResizeBound = true;
-
-    document.addEventListener('mousemove', function (e) {
-      if (!colResizeState) return;
-      var next = colResizeState.startWidth + (e.clientX - colResizeState.startX);
-      if (next < PREVIEW_COL_MIN) next = PREVIEW_COL_MIN;
-      setPreviewColWidth(colResizeState.colIndex, next);
-    });
-
-    document.addEventListener('mouseup', function () {
-      if (!colResizeState) return;
-      colResizeState = null;
-      document.body.classList.remove('preview-col-resizing');
-    });
-
-    var thead = document.getElementById('preview-head');
-    if (!thead) return;
-    thead.addEventListener('mousedown', function (e) {
-      var handle = e.target.closest && e.target.closest('.preview-col-resize');
-      var colIndex;
-      if (!handle) return;
-      e.preventDefault();
-      colIndex = parseInt(handle.getAttribute('data-col-index'), 10);
-      if (isNaN(colIndex) || !previewColumnWidths[colIndex]) return;
-      colResizeState = {
-        colIndex: colIndex,
-        startX: e.clientX,
-        startWidth: previewColumnWidths[colIndex]
-      };
-      document.body.classList.add('preview-col-resizing');
-    });
-  }
-
-  function rebuildPreviewHead(columns) {
-    var thead = document.getElementById('preview-head');
-    var trHead;
-    var i;
-    thead.innerHTML = '';
-    if (!columns.length) return;
-    trHead = document.createElement('tr');
-    for (i = 0; i < columns.length; i++) {
-      var th = document.createElement('th');
-      var handle = document.createElement('span');
-      th.textContent = GslbFields.keyToCn(columns[i]);
-      handle.className = 'preview-col-resize';
-      handle.setAttribute('data-col-index', String(i));
-      handle.setAttribute('aria-hidden', 'true');
-      handle.title = '拖动调整列宽';
-      th.appendChild(handle);
-      trHead.appendChild(th);
-    }
-    thead.appendChild(trHead);
-    thead.appendChild(buildFilterRow(columns));
-  }
-
-  function renderPreviewTable() {
-    var columns = previewColumns;
-    var rows = displayRows;
-    var thead = document.getElementById('preview-head');
-    var tbody = document.getElementById('preview-body');
-
-    tbody.innerHTML = '';
-
-    if (!columns.length) {
-      thead.innerHTML = '';
-      previewColumnWidths = [];
-      applyPreviewColgroup([]);
-      tbody.innerHTML = '<tr><td><span class="empty-hint">未选择任何字段</span></td></tr>';
-      updatePreviewBadge(0, previewRows.length);
-      return;
-    }
-
-    if (!thead.querySelector('.filter-row')) rebuildPreviewHead(columns);
-    syncPreviewColumnWidths();
-
-    if (!rows.length) {
-      var emptyTr = document.createElement('tr');
-      var emptyTd = document.createElement('td');
-      emptyTd.colSpan = columns.length;
-      emptyTd.innerHTML = '<span class="empty-hint">无匹配数据，请调整过滤条件后点击查询</span>';
-      emptyTr.appendChild(emptyTd);
-      tbody.appendChild(emptyTr);
-      updatePreviewBadge(0, previewRows.length);
-      return;
-    }
-
-    ensureRowHeight(columns, rows[0]);
-    renderVirtualSlice();
-    updatePreviewBadge(rows.length, previewRows.length);
-  }
-
-  function restoreRowSelection() {
-    if (!selectedDomainKey.name) return;
-    var tbody = document.getElementById('preview-body');
-    var trs = tbody.querySelectorAll('tr[data-domain]');
-    var i;
-    for (i = 0; i < trs.length; i++) {
-      if (trs[i].getAttribute('data-domain') === selectedDomainKey.name &&
-          trs[i].getAttribute('data-domain-type') === selectedDomainKey.type) {
-        trs[i].classList.add('selected');
-        break;
-      }
-    }
-  }
-
-  function selectDomainFromRow(tr) {
-    var domainName = tr.getAttribute('data-domain') || '';
-    if (!domainName) return;
-
-    selectedDomainKey = { name: domainName, type: tr.getAttribute('data-domain-type') || '' };
-    updateViewGraphButton();
-    updateRrsMemberButton();
-    resetRrsMemberModal();
-
-    var tbody = document.getElementById('preview-body');
-    var rows = tbody.querySelectorAll('tr.selected');
-    var i;
-    for (i = 0; i < rows.length; i++) rows[i].classList.remove('selected');
-    tr.classList.add('selected');
-  }
-
-  function buildFilterRow(columns) {
-    var tr = document.createElement('tr');
-    var i;
-    tr.className = 'filter-row';
-    for (i = 0; i < columns.length; i++) {
-      var th = document.createElement('th');
-      var input = document.createElement('input');
-      input.type = 'search';
-      input.className = 'col-filter-input';
-      input.setAttribute('data-col', columns[i]);
-      input.value = filterState.columns[columns[i]] || '';
-      input.placeholder = '过滤';
-      input.setAttribute('aria-label', GslbFields.keyToCn(columns[i]) + ' 列过滤');
-      input.addEventListener('input', scheduleFilter);
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (filterTimer) {
-            clearTimeout(filterTimer);
-            filterTimer = null;
-          }
-          onFilterQuery();
-        }
-      });
-      th.appendChild(input);
-      tr.appendChild(th);
-    }
-    return tr;
-  }
-
-  function applyFilterAndRender() {
-    if (!previewColumns.length) {
-      displayRows = [];
-      renderPreviewTable();
-      updateExportDisplayButton();
-      return;
-    }
-    if (!previewRows.length) {
-      displayRows = [];
-      renderPreviewTable();
-      updateExportDisplayButton();
-      return;
-    }
-    displayRows = GslbProcess.filterRowsByColumns(previewRows, filterState.columns, filterState.match);
-    resetPreviewScroll();
-    renderPreviewTable();
-    updateExportDisplayButton();
-  }
-
   function onFileSelected(e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -683,10 +462,20 @@ var GslbApp = (function () {
       }
       dcMemberIndex = GslbProcess.buildDcMemberIndex(jsonData);
       availableFields = GslbProcess.collectAvailableFields(jsonData, dcMemberIndex);
+      previewColumns = [];
       previewRows = [];
       displayRows = [];
-      measuredRowHeight = 0;
       selectedDomainKey = { name: '', type: '' };
+      explicitRowSelection = false;
+      if (gridApi) {
+        gridApi.setFilterModel(null);
+        gridApi.deselectAll();
+        gridApi.setColumnDefs([]);
+        gridApi.setRowData([]);
+        gridOptions.overlayNoRowsTemplate = noRowsHtml('导入 JSON 并点击「预览」查看数据');
+        gridApi.showNoRowsOverlay();
+      }
+      syncDisplayRows();
       updateViewGraphButton();
       updateRrsMemberButton();
       resetRrsMemberModal();
@@ -800,49 +589,59 @@ var GslbApp = (function () {
     var orders = getOrdersFromGroups();
     var rows = GslbProcess.buildAddRows(jsonData, orders, dcMemberIndex);
     var columns = orders.domain.concat(orders.pool).concat(orders.member);
+    var previousModel = gridApi ? (gridApi.getFilterModel() || {}) : {};
 
     previewColumns = columns;
     previewRows = rows;
-    measuredRowHeight = 0;
     selectedDomainKey = { name: '', type: '' };
-    selectedRowIndices = {};
+    explicitRowSelection = false;
     updateViewGraphButton();
     updateRrsMemberButton();
     resetRrsMemberModal();
     updateGenCmdsButton();
     updateExportDisplayButton();
     hideGraphModal();
-    pruneColumnFilters(columns);
-    rebuildPreviewHead(columns);
+    ensurePreviewGrid();
 
-    syncFilterFromInputs();
-    applyFilterAndRender();
+    if (!columns.length) {
+      gridOptions.overlayNoRowsTemplate = noRowsHtml('未选择任何字段');
+      gridApi.setColumnDefs([]);
+      gridApi.setRowData([]);
+      gridApi.setFilterModel(null);
+      syncDisplayRows();
+      return;
+    }
+
+    gridOptions.overlayNoRowsTemplate = noRowsHtml('无匹配数据，请调整过滤条件');
+    gridApi.setColumnDefs(buildPreviewColumnDefs(columns));
+    gridApi.setRowData(rows);
+    gridApi.setFilterModel(pruneFilterModel(previousModel, columns));
+    if (gridColumnApi) gridColumnApi.autoSizeAllColumns(false);
+    if (rows.length) gridApi.ensureIndexVisible(0);
+    syncDisplayRows();
   }
 
   function copySelection() {
-    if (!previewColumns.length || !displayRows.length) return;
+    if (!previewColumns.length || !gridApi) return;
 
     var rowsToCopy = [];
-    var keys = Object.keys(selectedRowIndices);
+    var focused;
+    var node;
     var i;
 
-    if (keys.length) {
-      keys.sort(function (a, b) { return Number(a) - Number(b); });
-      for (i = 0; i < keys.length; i++) {
-        rowsToCopy.push(displayRows[Number(keys[i])]);
-      }
+    if (explicitRowSelection) {
+      rowsToCopy = gridApi.getSelectedRows();
     } else if (selectedDomainKey.name) {
-      for (i = 0; i < displayRows.length; i++) {
-        var dn = displayRows[i]._domainName || displayRows[i]['domain.name'] || '';
-        var dt = displayRows[i]._domainType !== undefined ? displayRows[i]._domainType : (displayRows[i]['domain.type'] || '');
-        if (dn === selectedDomainKey.name && dt === selectedDomainKey.type) rowsToCopy.push(displayRows[i]);
-      }
-    } else {
-      var active = document.activeElement;
-      if (active && active.tagName === 'TD' && active.parentElement) {
-        var idx = active.parentElement.getAttribute('data-row-index');
-        if (idx !== null) rowsToCopy.push(displayRows[Number(idx)]);
-      }
+      gridApi.forEachNodeAfterFilter(function (rowNode) {
+        var domain = domainOfRow(rowNode.data);
+        if (domain.name === selectedDomainKey.name && domain.type === selectedDomainKey.type) {
+          rowsToCopy.push(rowNode.data);
+        }
+      });
+    } else if (gridApi.getFocusedCell) {
+      focused = gridApi.getFocusedCell();
+      node = focused ? gridApi.getDisplayedRowAtIndex(focused.rowIndex) : null;
+      if (node && node.data) rowsToCopy.push(node.data);
     }
 
     if (!rowsToCopy.length) return;
@@ -895,8 +694,8 @@ var GslbApp = (function () {
       return;
     }
 
-    syncFilterFromInputs();
-    var rows = GslbProcess.filterRowsByColumns(previewRows, filterState.columns, filterState.match);
+    syncDisplayRows();
+    var rows = displayRows;
     if (!rows.length) {
       alert('当前无显示数据，请先预览或调整过滤条件。');
       return;
@@ -1255,46 +1054,8 @@ var GslbApp = (function () {
     document.getElementById('help-overlay').classList.remove('visible');
   }
 
-  function bindRowSelection() {
-    var tbody = document.getElementById('preview-body');
-    tbody.addEventListener('click', function (e) {
-      var tr = e.target.closest('tr');
-      if (!tr || !tbody.contains(tr) || !tr.getAttribute('data-domain')) return;
-
-      if (e.ctrlKey || e.metaKey) {
-        var rowIdx = tr.getAttribute('data-row-index');
-        if (rowIdx !== null) {
-          if (selectedRowIndices[rowIdx]) delete selectedRowIndices[rowIdx];
-          else selectedRowIndices[rowIdx] = true;
-        }
-        tr.classList.toggle('selected');
-        if (tr.classList.contains('selected')) {
-          selectDomainFromRow(tr);
-        } else if (selectedDomainKey.name === tr.getAttribute('data-domain') &&
-                   selectedDomainKey.type === (tr.getAttribute('data-domain-type') || '')) {
-          selectedDomainKey = { name: '', type: '' };
-          updateViewGraphButton();
-          updateRrsMemberButton();
-          resetRrsMemberModal();
-          hideGraphModal();
-        }
-        return;
-      }
-
-      selectDomainFromRow(tr);
-    });
-
-    tbody.addEventListener('dblclick', function (e) {
-      var tr = e.target.closest('tr');
-      if (!tr || !tbody.contains(tr) || !tr.getAttribute('data-domain')) return;
-      selectDomainFromRow(tr);
-      viewSelectedDomainGraph();
-    });
-  }
-
   document.addEventListener('DOMContentLoaded', function () {
     init();
-    bindRowSelection();
   });
 
   return {

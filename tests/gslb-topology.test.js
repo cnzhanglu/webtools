@@ -9,8 +9,7 @@
  *   - buildTopology 节点 id 含 type
  *   - 缺省 domainType（undefined）时不限制 type（向后兼容）
  *   - 四级 enable 禁用状态、向后传播与共享 Server 入站路径规则
- *   - filterRowsByColumns 单列/多列 AND、包含/等于、空条件
- *   - measurePreviewColumnWidths 列宽估算
+ *   - 预览页使用本地 AG Grid 列过滤，旧自研表格已移除
  *   - 预览页字段折叠与关系图弹窗静态结构
  */
 module.exports = function (test, assert, assertEq) {
@@ -267,98 +266,14 @@ module.exports = function (test, assert, assertEq) {
     assert(member.disabledReasons.indexOf('所有入站路径均已禁用') !== -1, '应记录传播原因');
   });
 
-  // ─── 逐列过滤 ──────────────────────────────────────────────────────────────
-
-  test('filterRowsByColumns: 空条件返回全部行', function () {
-    var rows = [
-      { 'domain.name': 'a.example', 'member.ip': '1.1.1.1' },
-      { 'domain.name': 'b.example', 'member.ip': '2.2.2.2' }
-    ];
-    var out = GslbProcess.filterRowsByColumns(rows, { 'domain.name': '  ' }, 'contains');
-    assertEq(out.length, 2);
-  });
-
-  test('filterRowsByColumns: 单列包含匹配忽略大小写', function () {
-    var rows = [
-      { 'domain.name': 'App.Example', 'member.ip': '1.1.1.1' },
-      { 'domain.name': 'other.com', 'member.ip': '2.2.2.2' }
-    ];
-    var out = GslbProcess.filterRowsByColumns(rows, { 'domain.name': 'app' }, 'contains');
-    assertEq(out.length, 1);
-    assertEq(out[0]['domain.name'], 'App.Example');
-  });
-
-  test('filterRowsByColumns: 多列条件按 AND 组合', function () {
-    var rows = [
-      { 'domain.name': 'app.example', 'member.ip': '1.1.1.1' },
-      { 'domain.name': 'app.example', 'member.ip': '2.2.2.2' },
-      { 'domain.name': 'other.example', 'member.ip': '1.1.1.1' }
-    ];
-    var out = GslbProcess.filterRowsByColumns(rows, {
-      'domain.name': 'app',
-      'member.ip': '1.1.1.1'
-    }, 'contains');
-    assertEq(out.length, 1);
-    assertEq(out[0]['member.ip'], '1.1.1.1');
-  });
-
-  test('filterRowsByColumns: equals 需整格精确匹配', function () {
-    var rows = [
-      { 'domain.name': 'app.example' },
-      { 'domain.name': 'app' }
-    ];
-    var out = GslbProcess.filterRowsByColumns(rows, { 'domain.name': 'app' }, 'equals');
-    assertEq(out.length, 1);
-    assertEq(out[0]['domain.name'], 'app');
-  });
-
-  test('filterRowsByColumns: 缺列按空字符串比较', function () {
-    var rows = [
-      { 'domain.name': 'app.example' },
-      { 'domain.name': 'other', 'member.ip': '1.1.1.1' }
-    ];
-    var out = GslbProcess.filterRowsByColumns(rows, { 'member.ip': '1.1.1.1' }, 'contains');
-    assertEq(out.length, 1);
-    assertEq(out[0]['domain.name'], 'other');
-  });
-
-  test('measurePreviewColumnWidths: 空行按表头保底宽度', function () {
-    var w = GslbProcess.measurePreviewColumnWidths(
-      ['domain.name'],
-      [],
-      function () { return '域名名称'; }
-    );
-    assertEq(w.length, 1);
-    assert(w[0] >= 88, '空表也应有最小列宽');
-  });
-
-  test('measurePreviewColumnWidths: 短列不低于最小宽', function () {
-    var w = GslbProcess.measurePreviewColumnWidths(
-      ['domain.type'],
-      [{ 'domain.type': 'A' }],
-      function () { return '类型'; }
-    );
-    assertEq(w.length, 1);
-    assert(w[0] >= 88);
-  });
-
-  test('measurePreviewColumnWidths: 长文本列更宽', function () {
-    var w = GslbProcess.measurePreviewColumnWidths(
-      ['a', 'b'],
-      [{ a: 'x', b: 'this-is-a-very-long-cell-value-that-should-be-wider-than-short' }],
-      function (k) { return k; }
-    );
-    assertEq(w.length, 2);
-    assert(w[1] > w[0], '长文本列应比短列更宽');
-  });
-
   test('预览页字段配置默认折叠且关系图为独立弹窗', function () {
     var fs = require('fs');
     var path = require('path');
     var html = fs.readFileSync(path.join(__dirname, '../tools/gslb-json-export/index.html'), 'utf8');
     var css = fs.readFileSync(path.join(__dirname, '../tools/gslb-json-export/css/tool.css'), 'utf8');
     var app = fs.readFileSync(path.join(__dirname, '../tools/gslb-json-export/js/app.js'), 'utf8');
-    var tdCss = css.match(/#preview-table td\s*\{[\s\S]*?\}/);
+    var processJs = fs.readFileSync(path.join(__dirname, '../tools/gslb-json-export/js/process.js'), 'utf8');
+    var sw = fs.readFileSync(path.join(__dirname, '../sw.js'), 'utf8');
 
     assert(html.indexOf('<details class="field-config">') !== -1, '字段选择应为默认折叠的 details');
     assert(html.indexOf('<details class="field-config" open') === -1, '字段选择不得默认展开');
@@ -366,17 +281,28 @@ module.exports = function (test, assert, assertEq) {
     assert(html.indexOf('id="btn-close-graph"') !== -1, '缺少关系图关闭按钮');
     assert(html.indexOf('graph-overlay') !== -1 && html.indexOf('btn-close-graph') !== -1);
     assert(css.indexOf('modal-box-graph') !== -1, '缺少近全屏弹窗尺寸');
-    assert(tdCss, '缺少预览单元格样式');
-    assert(tdCss[0].indexOf('ellipsis') === -1, '预览单元格不应截断省略');
-    assert(tdCss[0].indexOf('user-select: text') !== -1, '预览单元格应可直接选中文字');
+    assert(css.indexOf('user-select: text') !== -1, '预览单元格应可直接选中文字');
     assert(app.indexOf("getElementById('graph-overlay').addEventListener('click'") === -1,
       '关系图遮罩不应绑定点击关闭');
     assert(/<div class="op-bar-row">[\s\S]*id="status-text"/.test(html),
       '状态应放在导入/方案/预览/导出同一行');
     assert(css.indexOf('body.graph-modal-open') !== -1, '打开关系图时应锁定背后页面滚动');
-    assert(html.indexOf('id="preview-cols"') !== -1, '预览表应有 colgroup 冻结列宽');
-    assert(css.indexOf('table-layout: fixed') !== -1, '预览表应使用固定列宽布局');
-    assert(css.indexOf('preview-col-resize') !== -1, '表头应有列宽拖动手柄');
+    assert(html.indexOf('id="preview-grid"') !== -1, '预览区应使用 AG Grid 容器');
+    assert(html.indexOf('ag-grid-community.min.noStyle.js') !== -1, '应本地加载 AG Grid');
+    assert(!/<script[^>]+src="https?:/.test(html), '脚本必须本地加载');
+    assert(!/<link[^>]+href="https?:/.test(html), '样式必须本地加载');
+    assert(html.indexOf('id="filter-match"') === -1, '不应再使用全局匹配方式');
+    assert(html.indexOf('id="preview-table"') === -1, '旧预览表应已移除');
+    assert(app.indexOf("filter: 'agTextColumnFilter'") !== -1, '每列应使用文本过滤器');
+    assert(app.indexOf('suppressFieldDotNotation: true') !== -1, '点号字段名必须按字面键读取');
+    assert(app.indexOf("'contains', 'notContains', 'equals', 'notEqual', 'startsWith', 'endsWith'") !== -1,
+      '每列应提供组件内置匹配方式');
+    assert(app.indexOf('filterRowsByColumns') === -1, '不应再调用自研列过滤');
+    assert(processJs.indexOf('filterRowsByColumns') === -1, '核心层不应再保留自研列过滤');
+    assert(sw.indexOf('webtools-v55') !== -1, '引入表格组件后应递增缓存版本');
+    assert(sw.indexOf('./shared/vendor/ag-grid/ag-grid-community.min.noStyle.js') !== -1, '应预缓存表格脚本');
+    assert(sw.indexOf('./shared/vendor/ag-grid/ag-grid.css') !== -1, '应预缓存表格基础样式');
+    assert(sw.indexOf('./shared/vendor/ag-grid/ag-theme-alpine.css') !== -1, '应预缓存表格主题');
     assert(html.indexOf('id="btn-export-display"') !== -1, '预览区应有导出显示 CSV 按钮');
     assert(html.indexOf('导出全量 CSV') !== -1, '顶部导出按钮应标明全量');
     assert(app.indexOf('gslb_export_display_') !== -1, '显示 CSV 文件名前缀应为 gslb_export_display_');
