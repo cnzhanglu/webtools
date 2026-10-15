@@ -1,21 +1,22 @@
 /**
- * GSLB JSON 导出 — 域名 / 地址池 / 服务成员 引用关系图（纯 SVG）
+ * GSLB JSON 导出 — 域名 / 地址池 / 服务成员 引用关系图
  *
- * 将 buildTopology 返回的 nodes/edges 做三列布局（域 | 池 | 成员），
- * 支持禁用节点/路径、拖拽平移、按钮缩放（滚轮不缩放、也不滚动背后页面）、
- * 画布铺满弹窗可用区域；节点高亮与点击选中；不依赖外部图形库。
+ * 数据流：buildTopology 的 domains/pools/members/edges
+ * → 转成 vis.Network 节点（level 固定三列）与边
+ * → 分层布局从左到右绘制；点击节点仍用右侧详情面板展示完整参数。
  *
- * 依赖：由 app.js 传入 topology 数据
- * 导出：GslbGraph（render / resetView / zoomIn / zoomOut / filterTopology）
+ * 禁用判定、池顺序和成员 seq 留在 process.js，这里只负责画布。
+ * 平移、缩放、悬停由 vis-network 提供；缩放按钮调用 getScale / fit。
+ *
+ * 依赖：vis（shared/vendor/vis-network）、GslbFields.keyToCn
+ * 导出：GslbGraph（render / resetView / zoomIn / zoomOut）
  */
 var GslbGraph = (function () {
   'use strict';
 
-  var NODE_W = 200;
-  var NODE_H = 72;
-  var COL_GAP = 180;
-  var ROW_GAP = 16;
-  var PAD = 40;
+  var ZOOM_STEP = 1.2;
+  var ZOOM_MIN = 0.5;
+  var ZOOM_MAX = 2;
 
   var COLORS = {
     domain: { fill: '#eff6ff', stroke: '#2563a8', text: '#1e3a5f' },
@@ -48,16 +49,9 @@ var GslbGraph = (function () {
     link_status: '链路状态'
   };
 
-  var currentTopology = null;
-  var layoutNodes = [];
-  var layoutEdges = [];
-  var panZoom = { x: 0, y: 0, scale: 1 };
-  var isPanning = false;
-  var panStart = { x: 0, y: 0 };
-  var highlightedIds = null;
-  var selectedId = null;
-  var bound = false;
-  var lastLayout = null;
+  var network = null;
+  var nodeById = {};
+  var wheelBound = false;
 
   function escText(s) {
     if (s === null || s === undefined) return '';
@@ -99,153 +93,6 @@ var GslbGraph = (function () {
     return pickDisplayParams(node.params, ['ip', 'port', 'enable']);
   }
 
-  function nodeMatchesQuery(node, query) {
-    if (!query) return true;
-    var q = query.toLowerCase();
-    var title = (node.name || node.label || '').toLowerCase();
-    if (title.indexOf(q) !== -1) return true;
-    var k, v;
-    for (k in node.params) {
-      if (!Object.prototype.hasOwnProperty.call(node.params, k)) continue;
-      v = node.params[k];
-      if (v !== null && v !== undefined && String(v).toLowerCase().indexOf(q) !== -1) return true;
-    }
-    return false;
-  }
-
-  function filterTopology(topology, filterState) {
-    var query = (filterState && filterState.query) ? filterState.query.trim() : '';
-    var scope = (filterState && filterState.scope) ? filterState.scope : 'all';
-    if (!query) {
-      return {
-        domains: topology.domains.slice(),
-        pools: topology.pools.slice(),
-        members: topology.members.slice(),
-        edges: topology.edges.slice()
-      };
-    }
-
-    var matchedIds = {};
-    var lists = [
-      { key: 'domain', items: topology.domains },
-      { key: 'pool', items: topology.pools },
-      { key: 'member', items: topology.members }
-    ];
-    var i, j, item, typeKey, e, changed;
-
-    for (i = 0; i < lists.length; i++) {
-      typeKey = lists[i].key;
-      if (scope !== 'all' && scope !== typeKey) continue;
-      for (j = 0; j < lists[i].items.length; j++) {
-        item = lists[i].items[j];
-        if (nodeMatchesQuery(item, query)) matchedIds[item.id] = true;
-      }
-    }
-
-    changed = true;
-    while (changed) {
-      changed = false;
-      for (i = 0; i < topology.edges.length; i++) {
-        e = topology.edges[i];
-        if (matchedIds[e.from] && !matchedIds[e.to]) {
-          matchedIds[e.to] = true;
-          changed = true;
-        }
-        if (matchedIds[e.to] && !matchedIds[e.from]) {
-          matchedIds[e.from] = true;
-          changed = true;
-        }
-      }
-    }
-
-    function pick(list) {
-      var out = [];
-      for (i = 0; i < list.length; i++) {
-        if (matchedIds[list[i].id]) out.push(list[i]);
-      }
-      return out;
-    }
-
-    var domains = pick(topology.domains);
-    var pools = pick(topology.pools);
-    var members = pick(topology.members);
-    var idSet = {};
-    for (i = 0; i < domains.length; i++) idSet[domains[i].id] = true;
-    for (i = 0; i < pools.length; i++) idSet[pools[i].id] = true;
-    for (i = 0; i < members.length; i++) idSet[members[i].id] = true;
-
-    var edges = [];
-    for (i = 0; i < topology.edges.length; i++) {
-      e = topology.edges[i];
-      if (idSet[e.from] && idSet[e.to]) edges.push(e);
-    }
-
-    return { domains: domains, pools: pools, members: members, edges: edges };
-  }
-
-  function computeLayout(filtered) {
-    var cols = [
-      { type: 'domain', items: filtered.domains },
-      { type: 'pool', items: filtered.pools },
-      { type: 'member', items: filtered.members }
-    ];
-    var nodes = [];
-    var nodeIndex = {};
-    var c, i, item, x, y, maxRows;
-
-    maxRows = 0;
-    for (c = 0; c < cols.length; c++) {
-      if (cols[c].items.length > maxRows) maxRows = cols[c].items.length;
-    }
-
-    for (c = 0; c < cols.length; c++) {
-      x = PAD + c * (NODE_W + COL_GAP);
-      var colHeight = cols[c].items.length * NODE_H + Math.max(0, cols[c].items.length - 1) * ROW_GAP;
-      var offsetY = PAD + Math.max(0, (maxRows * (NODE_H + ROW_GAP) - ROW_GAP - colHeight) / 2);
-
-      for (i = 0; i < cols[c].items.length; i++) {
-        item = cols[c].items[i];
-        y = offsetY + i * (NODE_H + ROW_GAP);
-        var ln = {
-          id: item.id,
-          type: cols[c].type,
-          name: item.name || item.label || '',
-          params: item.params || {},
-          disabled: !!item.disabled,
-          disabledReasons: (item.disabledReasons || []).slice(),
-          x: x,
-          y: y,
-          w: NODE_W,
-          h: NODE_H
-        };
-        nodes.push(ln);
-        nodeIndex[item.id] = ln;
-      }
-    }
-
-    var edges = [];
-    for (i = 0; i < filtered.edges.length; i++) {
-      var e = filtered.edges[i];
-      if (nodeIndex[e.from] && nodeIndex[e.to]) {
-        edges.push({
-          from: e.from,
-          to: e.to,
-          kind: e.kind,
-          params: e.params || {},
-          disabled: !!e.disabled,
-          disabledReasons: (e.disabledReasons || []).slice(),
-          fromNode: nodeIndex[e.from],
-          toNode: nodeIndex[e.to]
-        });
-      }
-    }
-
-    var width = PAD * 2 + 3 * NODE_W + 2 * COL_GAP;
-    var height = PAD * 2 + Math.max(maxRows, 1) * NODE_H + Math.max(0, maxRows - 1) * ROW_GAP;
-
-    return { nodes: nodes, edges: edges, width: width, height: height, nodeIndex: nodeIndex };
-  }
-
   function edgeLabel(edge) {
     if (edge.kind === 'domain-pool') {
       if (edge.params.ratio !== undefined && edge.params.ratio !== '') return 'ratio:' + edge.params.ratio;
@@ -260,25 +107,34 @@ var GslbGraph = (function () {
     return parts.join(' ');
   }
 
-  function buildEdgePath(fromNode, toNode) {
-    var x1 = fromNode.x + fromNode.w;
-    var y1 = fromNode.y + fromNode.h / 2;
-    var x2 = toNode.x;
-    var y2 = toNode.y + toNode.h / 2;
-    var cx = (x1 + x2) / 2;
-    return 'M' + x1 + ',' + y1 + ' C' + cx + ',' + y1 + ' ' + cx + ',' + y2 + ' ' + x2 + ',' + y2;
+  function nodeLevel(type) {
+    if (type === 'domain') return 0;
+    if (type === 'pool') return 1;
+    return 2;
   }
 
-  function getRelatedIds(nodeId) {
-    var ids = {};
-    ids[nodeId] = true;
-    var i, e;
-    for (i = 0; i < layoutEdges.length; i++) {
-      e = layoutEdges[i];
-      if (e.from === nodeId) ids[e.to] = true;
-      if (e.to === nodeId) ids[e.from] = true;
+  function nodeLabel(node) {
+    var lines = [node.name || ''];
+    var params = pickNodeDisplayLines(node);
+    var i, line;
+    for (i = 0; i < params.length && i < 3; i++) {
+      line = params[i].label + ': ' + params[i].value;
+      if (line.length > 28) line = line.slice(0, 27) + '…';
+      lines.push(line);
     }
-    return ids;
+    return lines.join('\n');
+  }
+
+  function nodeColor(type, disabled) {
+    var colors = COLORS[type] || COLORS.member;
+    var fill = disabled ? '#f1f5f9' : colors.fill;
+    var border = disabled ? '#dc2626' : colors.stroke;
+    return {
+      background: fill,
+      border: border,
+      highlight: { background: fill, border: border },
+      hover: { background: fill, border: border }
+    };
   }
 
   function renderDetail(node) {
@@ -309,142 +165,202 @@ var GslbGraph = (function () {
     panel.innerHTML = html;
   }
 
-  function applyHighlight() {
-    var svg = document.getElementById('graph-svg');
-    if (!svg) return;
-    var nodeEls = svg.querySelectorAll('.graph-node');
-    var edgeEls = svg.querySelectorAll('.graph-edge');
-    var i, id;
-
-    for (i = 0; i < nodeEls.length; i++) {
-      id = nodeEls[i].getAttribute('data-id');
-      if (!highlightedIds) {
-        nodeEls[i].classList.remove('dimmed', 'highlight');
-        if (selectedId === id) nodeEls[i].classList.add('selected');
-        else nodeEls[i].classList.remove('selected');
-      } else if (highlightedIds[id]) {
-        nodeEls[i].classList.add('highlight');
-        nodeEls[i].classList.remove('dimmed');
-      } else {
-        nodeEls[i].classList.add('dimmed');
-        nodeEls[i].classList.remove('highlight');
-      }
-    }
-
-    for (i = 0; i < edgeEls.length; i++) {
-      if (!highlightedIds) {
-        edgeEls[i].classList.remove('dimmed', 'highlight');
-      } else {
-        var from = edgeEls[i].getAttribute('data-from');
-        var to = edgeEls[i].getAttribute('data-to');
-        if (highlightedIds[from] && highlightedIds[to]) {
-          edgeEls[i].classList.add('highlight');
-          edgeEls[i].classList.remove('dimmed');
-        } else {
-          edgeEls[i].classList.add('dimmed');
-          edgeEls[i].classList.remove('highlight');
-        }
-      }
+  function destroyNetwork() {
+    if (network) {
+      network.destroy();
+      network = null;
     }
   }
 
-  function wrapSize() {
-    var wrap = document.getElementById('graph-svg-wrap');
-    return {
-      w: wrap ? wrap.clientWidth : 0,
-      h: wrap ? wrap.clientHeight : 0
+  function showEmpty(wrap, message) {
+    destroyNetwork();
+    nodeById = {};
+    wrap.innerHTML = '';
+    var empty = document.createElement('div');
+    empty.className = 'graph-empty';
+    empty.textContent = message;
+    wrap.appendChild(empty);
+    renderDetail(null);
+  }
+
+  function bindWheelGuard() {
+    if (wheelBound) return;
+    var overlay = document.getElementById('graph-overlay');
+    if (!overlay) return;
+    wheelBound = true;
+    // 绘图区滚轮交给 vis 缩放；详情栏仍可滚动。吞掉事件避免背后预览表跟着滚。
+    overlay.addEventListener('wheel', function (e) {
+      if (e.target.closest && e.target.closest('.graph-detail')) return;
+      e.preventDefault();
+    }, { passive: false });
+  }
+
+  function toVisNode(item, type) {
+    var node = {
+      id: item.id,
+      type: type,
+      name: item.name || item.label || '',
+      params: item.params || {},
+      disabled: !!item.disabled,
+      disabledReasons: (item.disabledReasons || []).slice()
     };
+    nodeById[item.id] = node;
+    var visNode = {
+      id: item.id,
+      label: nodeLabel(node),
+      level: nodeLevel(type),
+      shape: 'box',
+      margin: 10,
+      borderWidth: 2,
+      borderWidthSelected: 3,
+      widthConstraint: { maximum: 220 },
+      color: nodeColor(type, node.disabled),
+      font: {
+        color: node.disabled ? '#64748b' : (COLORS[type] || COLORS.member).text,
+        face: 'PingFang SC, Microsoft YaHei, sans-serif',
+        size: 13,
+        align: 'left'
+      },
+      shapeProperties: { borderDashes: node.disabled ? [7, 5] : false },
+      title: node.disabled
+        ? node.name + '（禁用：' + node.disabledReasons.join('；') + '）'
+        : node.name + '（启用）'
+    };
+    return visNode;
   }
 
-  /** SVG 画布与容器同尺寸，平移/缩放才不会被内容包围盒裁切。 */
-  function sizeSvgToWrap(svg) {
-    var size = wrapSize();
-    var w = Math.max(size.w, 1);
-    var h = Math.max(size.h, 1);
-    svg.setAttribute('width', String(w));
-    svg.setAttribute('height', String(h));
-    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  function toVisEdge(edge, index) {
+    var label = edgeLabel(edge);
+    var visEdge = {
+      id: edge.from + '\0' + edge.to + '\0' + index,
+      from: edge.from,
+      to: edge.to,
+      arrows: 'to',
+      color: { color: edge.disabled ? '#dc2626' : '#94a3b8', highlight: edge.disabled ? '#dc2626' : '#2563a8' },
+      width: edge.disabled ? 2 : 1.5,
+      dashes: edge.disabled ? [7, 5] : false,
+      smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.4 },
+      font: {
+        size: 11,
+        color: edge.disabled ? '#b91c1c' : '#64748b',
+        strokeWidth: 3,
+        strokeColor: '#f8fafc',
+        align: 'middle'
+      }
+    };
+    if (label) visEdge.label = label;
+    if (edge.disabled && edge.disabledReasons && edge.disabledReasons.length) {
+      visEdge.title = '禁用：' + edge.disabledReasons.join('；');
+    }
+    return visEdge;
   }
 
-  /** 将拓扑居中放到可视区；超出部分靠拖拽查看。 */
-  function centerGraph(layout) {
-    var size = wrapSize();
-    if (!layout || !size.w || !size.h) {
-      panZoom.x = 0;
-      panZoom.y = 0;
+  function mountNetwork(wrap, nodes, edges) {
+    destroyNetwork();
+    wrap.innerHTML = '';
+    var host = document.createElement('div');
+    host.className = 'graph-network';
+    wrap.appendChild(host);
+
+    network = new vis.Network(host, { nodes: nodes, edges: edges }, {
+      autoResize: true,
+      layout: {
+        hierarchical: {
+          enabled: true,
+          direction: 'LR',
+          sortMethod: 'directed',
+          levelSeparation: 280,
+          nodeSpacing: 36,
+          treeSpacing: 48,
+          blockShifting: true,
+          edgeMinimization: true,
+          parentCentralization: true
+        }
+      },
+      physics: false,
+      interaction: {
+        hover: true,
+        hoverConnectedEdges: true,
+        tooltipDelay: 200,
+        navigationButtons: false,
+        keyboard: false,
+        zoomView: true,
+        dragView: true,
+        multiselect: false
+      },
+      nodes: { shape: 'box' },
+      edges: { arrows: { to: { enabled: true, scaleFactor: 0.6 } } }
+    });
+
+    network.on('click', function (params) {
+      var id = params.nodes && params.nodes.length ? params.nodes[0] : '';
+      renderDetail(id ? nodeById[id] : null);
+    });
+
+    network.fit({ animation: false });
+    if (!wrap.clientWidth) {
+      requestAnimationFrame(function () {
+        if (network) network.fit({ animation: false });
+      });
+    }
+  }
+
+  function setBadge(text) {
+    var badge = document.getElementById('graph-badge');
+    if (badge) badge.textContent = text;
+  }
+
+  /**
+   * 渲染拓扑图。
+   * @param {object} topology     buildTopology 返回的拓扑数据
+   * @param {object} filterState  保留参数，调用方传入 null
+   * @param {string} displayLabel 展示标签，由 app.js 拼接为 "name (type)" 传入
+   */
+  function render(topology, filterState, displayLabel) {
+    var wrap = document.getElementById('graph-svg-wrap');
+    if (!wrap) return;
+    bindWheelGuard();
+
+    if (!topology || !displayLabel) {
+      showEmpty(wrap, '双击表格行或点击「查看关系图」打开引用拓扑');
+      setBadge('—');
       return;
     }
-    panZoom.x = Math.round((size.w - layout.width * panZoom.scale) / 2);
-    panZoom.y = Math.round((size.h - layout.height * panZoom.scale) / 2);
-  }
 
-  function updateTransform() {
-    var g = document.getElementById('graph-root');
-    if (g) {
-      g.setAttribute('transform', 'translate(' + panZoom.x + ',' + panZoom.y + ') scale(' + panZoom.scale + ')');
-    }
-  }
-
-  function bindPanZoom() {
-    if (bound) return;
-    bound = true;
-
-    var wrap = document.getElementById('graph-svg-wrap');
-    var overlay = document.getElementById('graph-overlay');
-    if (!wrap) return;
-
-    wrap.addEventListener('mousedown', function (e) {
-      if (e.target.closest('.graph-node')) return;
-      isPanning = true;
-      panStart = { x: e.clientX - panZoom.x, y: e.clientY - panZoom.y };
-      wrap.classList.add('panning');
-    });
-
-    document.addEventListener('mousemove', function (e) {
-      if (!isPanning) return;
-      panZoom.x = e.clientX - panStart.x;
-      panZoom.y = e.clientY - panStart.y;
-      updateTransform();
-    });
-
-    document.addEventListener('mouseup', function () {
-      isPanning = false;
-      if (wrap) wrap.classList.remove('panning');
-    });
-
-    // 绘图区吞掉滚轮，避免背后预览表跟着滚；右侧详情仍可滚动。
-    if (overlay) {
-      overlay.addEventListener('wheel', function (e) {
-        if (e.target.closest && e.target.closest('.graph-detail')) return;
-        e.preventDefault();
-      }, { passive: false });
+    if (!topology.domains.length) {
+      showEmpty(wrap, '域名「' + displayLabel + '」无地址池引用或数据不存在');
+      setBadge(displayLabel + ' · 无引用');
+      return;
     }
 
-    window.addEventListener('resize', function () {
-      var svg = document.getElementById('graph-svg');
-      if (!svg || !lastLayout) return;
-      if (overlay && !overlay.classList.contains('visible')) return;
-      sizeSvgToWrap(svg);
-    });
+    destroyNetwork();
+    nodeById = {};
+    var nodes = [];
+    var edges = [];
+    var i;
+    for (i = 0; i < topology.domains.length; i++) nodes.push(toVisNode(topology.domains[i], 'domain'));
+    for (i = 0; i < topology.pools.length; i++) nodes.push(toVisNode(topology.pools[i], 'pool'));
+    for (i = 0; i < topology.members.length; i++) nodes.push(toVisNode(topology.members[i], 'member'));
+    for (i = 0; i < topology.edges.length; i++) {
+      if (nodeById[topology.edges[i].from] && nodeById[topology.edges[i].to]) {
+        edges.push(toVisEdge(topology.edges[i], i));
+      }
+    }
+
+    mountNetwork(wrap, nodes, edges);
+    setBadge(displayLabel + ' · ' + nodes.length + ' 节点 · ' + edges.length + ' 条引用');
   }
 
-  var ZOOM_STEP = 1.2;
-  var ZOOM_MIN = 0.5;
-  var ZOOM_MAX = 2;
-
-  /** 以可视区中心为锚点缩放，限制在 ZOOM_MIN～ZOOM_MAX */
   function zoomBy(factor) {
-    var prev = panZoom.scale;
-    var next = prev * factor;
+    if (!network) return;
+    var next = network.getScale() * factor;
     if (next < ZOOM_MIN) next = ZOOM_MIN;
     if (next > ZOOM_MAX) next = ZOOM_MAX;
-    var size = wrapSize();
-    var cx = size.w / 2;
-    var cy = size.h / 2;
-    panZoom.x = cx - (cx - panZoom.x) * (next / prev);
-    panZoom.y = cy - (cy - panZoom.y) * (next / prev);
-    panZoom.scale = next;
-    updateTransform();
+    network.moveTo({
+      position: network.getViewPosition(),
+      scale: next,
+      animation: false
+    });
   }
 
   function zoomIn() {
@@ -455,212 +371,15 @@ var GslbGraph = (function () {
     zoomBy(1 / ZOOM_STEP);
   }
 
-  function renderSvg(layout) {
-    var wrap = document.getElementById('graph-svg-wrap');
-    if (!wrap) return;
-
-    lastLayout = layout;
-    layoutNodes = layout.nodes;
-    layoutEdges = layout.edges;
-
-    if (!layout.nodes.length) {
-      wrap.innerHTML = '<div class="graph-empty">无匹配节点，请调整过滤条件</div>';
-      renderDetail(null);
-      return;
-    }
-
-    var svgNs = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(svgNs, 'svg');
-    svg.id = 'graph-svg';
-    sizeSvgToWrap(svg);
-
-    var root = document.createElementNS(svgNs, 'g');
-    root.id = 'graph-root';
-
-    var edgeLayer = document.createElementNS(svgNs, 'g');
-    edgeLayer.setAttribute('class', 'graph-edges');
-    var nodeLayer = document.createElementNS(svgNs, 'g');
-    nodeLayer.setAttribute('class', 'graph-nodes');
-
-    var i, j, edge, path, label, midX, midY, g, rect, title, sub, lines, params;
-
-    for (i = 0; i < layout.edges.length; i++) {
-      edge = layout.edges[i];
-      g = document.createElementNS(svgNs, 'g');
-      g.setAttribute('class', edge.disabled ? 'graph-edge disabled' : 'graph-edge');
-      g.setAttribute('data-from', edge.from);
-      g.setAttribute('data-to', edge.to);
-      if (edge.disabledReasons.length) {
-        var edgeTitle = document.createElementNS(svgNs, 'title');
-        edgeTitle.textContent = '禁用：' + edge.disabledReasons.join('；');
-        g.appendChild(edgeTitle);
-      }
-
-      path = document.createElementNS(svgNs, 'path');
-      path.setAttribute('d', buildEdgePath(edge.fromNode, edge.toNode));
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', '#94a3b8');
-      path.setAttribute('stroke-width', '1.5');
-      g.appendChild(path);
-
-      label = edgeLabel(edge);
-      if (label) {
-        midX = (edge.fromNode.x + edge.fromNode.w + edge.toNode.x) / 2;
-        midY = (edge.fromNode.y + edge.fromNode.h / 2 + edge.toNode.y + edge.toNode.h / 2) / 2;
-        var text = document.createElementNS(svgNs, 'text');
-        text.setAttribute('x', midX);
-        text.setAttribute('y', midY - 4);
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('class', 'graph-edge-label');
-        text.textContent = label;
-        g.appendChild(text);
-      }
-
-      edgeLayer.appendChild(g);
-    }
-
-    for (i = 0; i < layout.nodes.length; i++) {
-      var node = layout.nodes[i];
-      var colors = COLORS[node.type] || COLORS.member;
-
-      g = document.createElementNS(svgNs, 'g');
-      g.setAttribute('class', node.disabled ? 'graph-node disabled' : 'graph-node');
-      g.setAttribute('data-id', node.id);
-      g.setAttribute('transform', 'translate(' + node.x + ',' + node.y + ')');
-
-      var nodeTitle = document.createElementNS(svgNs, 'title');
-      nodeTitle.textContent = node.disabled
-        ? node.name + '（禁用：' + node.disabledReasons.join('；') + '）'
-        : node.name + '（启用）';
-      g.appendChild(nodeTitle);
-
-      rect = document.createElementNS(svgNs, 'rect');
-      rect.setAttribute('width', node.w);
-      rect.setAttribute('height', node.h);
-      rect.setAttribute('rx', '8');
-      rect.setAttribute('fill', colors.fill);
-      rect.setAttribute('stroke', colors.stroke);
-      rect.setAttribute('stroke-width', '2');
-      g.appendChild(rect);
-
-      title = document.createElementNS(svgNs, 'text');
-      title.setAttribute('x', '10');
-      title.setAttribute('y', '22');
-      title.setAttribute('class', 'graph-node-title');
-      title.setAttribute('fill', colors.text);
-      var titleText = node.name.length > 22 ? node.name.slice(0, 21) + '…' : node.name;
-      title.textContent = titleText;
-      g.appendChild(title);
-
-      params = pickNodeDisplayLines(node);
-
-      for (j = 0; j < params.length && j < 3; j++) {
-        sub = document.createElementNS(svgNs, 'text');
-        sub.setAttribute('x', '10');
-        sub.setAttribute('y', String(40 + j * 14));
-        sub.setAttribute('class', 'graph-node-sub');
-        sub.setAttribute('fill', '#64748b');
-        var line = params[j].label + ': ' + params[j].value;
-        if (line.length > 28) line = line.slice(0, 27) + '…';
-        sub.textContent = line;
-        g.appendChild(sub);
-      }
-
-      g.addEventListener('mouseenter', function (ev) {
-        var nid = ev.currentTarget.getAttribute('data-id');
-        highlightedIds = getRelatedIds(nid);
-        applyHighlight();
-      });
-      g.addEventListener('mouseleave', function () {
-        highlightedIds = null;
-        applyHighlight();
-      });
-      g.addEventListener('click', function (ev) {
-        ev.stopPropagation();
-        var nid = ev.currentTarget.getAttribute('data-id');
-        selectedId = nid;
-        var n = null;
-        for (var k = 0; k < layoutNodes.length; k++) {
-          if (layoutNodes[k].id === nid) { n = layoutNodes[k]; break; }
-        }
-        renderDetail(n);
-        applyHighlight();
-      });
-
-      nodeLayer.appendChild(g);
-    }
-
-    root.appendChild(edgeLayer);
-    root.appendChild(nodeLayer);
-    svg.appendChild(root);
-
-    wrap.innerHTML = '';
-    wrap.appendChild(svg);
-    bindPanZoom();
-    panZoom.scale = 1;
-    centerGraph(layout);
-    updateTransform();
-    applyHighlight();
-    if (!wrap.clientWidth) {
-      requestAnimationFrame(function () {
-        var live = document.getElementById('graph-svg');
-        if (!live || !lastLayout) return;
-        sizeSvgToWrap(live);
-        centerGraph(lastLayout);
-        updateTransform();
-      });
-    }
-  }
-
-  /**
-   * 渲染拓扑图。
-   * @param {object} topology     buildTopology 返回的拓扑数据
-   * @param {object} filterState  保留参数（暂未使用）
-   * @param {string} displayLabel 展示标签，由 app.js 拼接为 "name (type)" 传入
-   */
-  function render(topology, filterState, displayLabel) {
-    currentTopology = topology;
-    var wrap = document.getElementById('graph-svg-wrap');
-    if (!wrap) return;
-
-    if (!topology || !displayLabel) {
-      lastLayout = null;
-      wrap.innerHTML = '<div class="graph-empty">双击表格行或点击「查看关系图」打开引用拓扑</div>';
-      renderDetail(null);
-      var badgeEmpty = document.getElementById('graph-badge');
-      if (badgeEmpty) badgeEmpty.textContent = '—';
-      return;
-    }
-
-    if (!topology.domains.length) {
-      wrap.innerHTML = '<div class="graph-empty">域名「' + escText(displayLabel) + '」无地址池引用或数据不存在</div>';
-      renderDetail(null);
-      var badgeNone = document.getElementById('graph-badge');
-      if (badgeNone) badgeNone.textContent = displayLabel + ' · 无引用';
-      return;
-    }
-
-    var layout = computeLayout(topology);
-    renderSvg(layout);
-
-    var badge = document.getElementById('graph-badge');
-    if (badge) {
-      var nodeCount = topology.domains.length + topology.pools.length + topology.members.length;
-      badge.textContent = displayLabel + ' · ' + nodeCount + ' 节点 · ' + topology.edges.length + ' 条引用';
-    }
-  }
-
   function resetView() {
-    panZoom.scale = 1;
-    centerGraph(lastLayout);
-    updateTransform();
+    if (!network) return;
+    network.fit({ animation: false });
   }
 
   return {
     render: render,
     resetView: resetView,
     zoomIn: zoomIn,
-    zoomOut: zoomOut,
-    filterTopology: filterTopology
+    zoomOut: zoomOut
   };
 })();

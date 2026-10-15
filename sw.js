@@ -4,14 +4,15 @@
  * 生命周期：
  *   install  → precacheAll 逐项 fetch（cache: reload）写入 PRECACHE_URLS
  *   activate → 删除旧版本 CACHE_NAME 以外的缓存
- *   fetch    → /api/* 仅网络；导航网络优先（不写缓存）；sw.js 网络优先；其余静态缓存优先并后台更新
+ *   fetch    → /api/* 仅网络；导航缓存优先；sw.js 网络优先；其余静态缓存优先并后台更新
+ *   message  → 响应页面查询，返回当前 CACHE_VERSION
  *
  * 注意：Cloudflare 会将 /xxx/index.html 307 重定向到 /xxx/，
  * 因此预缓存须使用带尾斜杠的目录 URL，不可用 index.html 路径。
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v55';
+var CACHE_VERSION = 'webtools-v57';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -26,6 +27,7 @@ var PRECACHE_URLS = [
   './shared/vendor/ag-grid/ag-grid-community.min.noStyle.js',
   './shared/vendor/ag-grid/ag-grid.css',
   './shared/vendor/ag-grid/ag-theme-alpine.css',
+  './shared/vendor/vis-network/vis-network.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './tools/net-policy/',
@@ -173,6 +175,13 @@ self.addEventListener('activate', function (event) {
   );
 });
 
+self.addEventListener('message', function (event) {
+  if (!event.data || event.data.type !== 'GET_VERSION') return;
+  if (event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ version: CACHE_VERSION });
+  }
+});
+
 self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
 
@@ -194,18 +203,11 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  /* 页面导航：网络优先，离线回退预缓存（不缓存任意导航 URL，避免 Cache 膨胀） */
+  /* 页面导航：优先使用预缓存，避免已安装应用启动时等待网络 */
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).then(function (response) {
-        if (response && response.ok) {
-          return response;
-        }
-        return matchNavigateFallback(event.request).then(function (cached) {
-          return cached || response;
-        });
-      }).catch(function () {
-        return matchNavigateFallback(event.request);
+      matchNavigateFallback(event.request).then(function (cached) {
+        return cached || fetch(event.request);
       })
     );
     return;
