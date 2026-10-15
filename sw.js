@@ -11,7 +11,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v54';
+var CACHE_VERSION = 'webtools-v55';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -23,6 +23,9 @@ var PRECACHE_URLS = [
   './shared/js/ipcidr.js',
   './shared/js/tools-registry.js',
   './shared/js/pwa.js',
+  './shared/vendor/ag-grid/ag-grid-community.min.noStyle.js',
+  './shared/vendor/ag-grid/ag-grid.css',
+  './shared/vendor/ag-grid/ag-theme-alpine.css',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './tools/net-policy/',
