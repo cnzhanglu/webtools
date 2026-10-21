@@ -62,6 +62,14 @@ var BocToolRegistry = {
       status: 'ready',
     },
     {
+      id: 'dns-zone-summary',
+      name: '域名区汇总',
+      description: '批量输入 DNS 区名称，自动将子区归入输入中已存在的最短父区，输出精简区清单及合并明细。',
+      tags: ['域名', 'DNS', '区名称', '汇总'],
+      path: 'tools/dns-zone-summary/index.html',
+      status: 'ready',
+    },
+    {
       id: 'url-codec',
       name: 'URL 编解码',
       description: '支持 encodeURIComponent / encodeURI / 表单编码三种模式，提供单行和批量编解码，并高亮显示编解码前后差异。',

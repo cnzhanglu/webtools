@@ -12,7 +12,7 @@
  *
  * 新增工具时请将对应静态资源追加到 PRECACHE_URLS，并递增 CACHE_VERSION。
  */
-var CACHE_VERSION = 'webtools-v57';
+var CACHE_VERSION = 'webtools-v58';
 var CACHE_NAME = CACHE_VERSION;
 
 var PRECACHE_URLS = [
@@ -82,6 +82,10 @@ var PRECACHE_URLS = [
   './tools/punycode-tool/css/tool.css',
   './tools/punycode-tool/js/punycode.js',
   './tools/punycode-tool/js/app.js',
+  './tools/dns-zone-summary/',
+  './tools/dns-zone-summary/css/tool.css',
+  './tools/dns-zone-summary/js/process.js',
+  './tools/dns-zone-summary/js/app.js',
   './tools/url-codec/',
   './tools/url-codec/css/tool.css',
   './tools/url-codec/js/app.js',

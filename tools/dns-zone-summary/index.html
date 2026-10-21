@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>域名区汇总</title>
+<link rel="manifest" href="../../manifest.webmanifest">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工具箱">
+<link rel="icon" href="../../icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<link rel="stylesheet" href="../../shared/css/common.css">
+<link rel="stylesheet" href="css/tool.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div>
+    <h1>域名区汇总</h1>
+    <p>按已输入的最短父区合并子区，不自动推导新的共同父区</p>
+  </div>
+  <a class="header-back" href="../../index.html">← 返回工具箱</a>
+</header>
+
+<main class="page-main dz-main">
+  <section class="panel">
+    <div class="panel-header">
+      <h2>区名称清单</h2>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" onclick="DnsZoneSummaryApp.doSummarize()">汇总</button>
+        <button type="button" class="btn btn-outline" onclick="DnsZoneSummaryApp.loadSample()">加载示例</button>
+        <button type="button" class="btn btn-danger" onclick="DnsZoneSummaryApp.clearAll()">清空</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <label class="field-label" for="zone-input">每行输入一个 DNS 区名称</label>
+      <textarea id="zone-input" spellcheck="false" placeholder="example.com&#10;api.example.com&#10;internal.example.net"></textarea>
+      <p class="field-help">自动忽略空行、大小写和末尾点；只有输入中明确存在的父区才会覆盖子区。</p>
+    </div>
+  </section>
+
+  <section class="summary-grid" aria-label="汇总统计">
+    <div class="summary-card"><span id="input-count">0</span><small>输入条目</small></div>
+    <div class="summary-card"><span id="unique-count">0</span><small>有效去重</small></div>
+    <div class="summary-card"><span id="merged-count">0</span><small>合并子区</small></div>
+    <div class="summary-card"><span id="result-count">0</span><small>保留区</small></div>
+  </section>
+
+  <section class="result-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>汇总结果</h2>
+        <button type="button" class="btn btn-outline" onclick="DnsZoneSummaryApp.copyResult()">复制结果</button>
+      </div>
+      <div class="panel-body result-body">
+        <textarea id="zone-output" readonly spellcheck="false" placeholder="汇总后的区名称会显示在这里"></textarea>
+        <div id="result-note" class="result-note">等待输入</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>合并明细</h2>
+        <span class="stat-badge" id="mapping-badge">0 条</span>
+      </div>
+      <div class="panel-body table-wrap">
+        <table class="mapping-table">
+          <thead>
+            <tr><th>原子区</th><th>归入最短父区</th></tr>
+          </thead>
+          <tbody id="mapping-body">
+            <tr class="empty-row"><td colspan="2">暂无合并项</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel invalid-panel" id="invalid-panel" hidden>
+    <div class="panel-header">
+      <h2>未处理的无效输入</h2>
+      <span class="stat-badge stat-badge-warn" id="invalid-badge">0 条</span>
+    </div>
+    <div class="panel-body">
+      <ul class="invalid-list" id="invalid-list"></ul>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  工具箱 · 纯静态前端 · 数据不出浏览器<br>
+  <a href="https://github.com/cnzhanglu/webtools" target="_blank" rel="noopener noreferrer">离线文件下载 GitHub</a>
+</footer>
+
+<script src="../../shared/js/utils.js"></script>
+<script src="js/process.js"></script>
+<script src="js/app.js"></script>
+<script src="../../shared/js/pwa.js"></script>
+</body>
+</html>

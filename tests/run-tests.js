@@ -108,6 +108,10 @@ loadScript('tools/dynamic-routing/js/process.js');
 console.log('\nDynamicRoutingProcess');
 require('./dynamic-routing.test.js')(test, assert, assertEq);
 
+loadScript('tools/dns-zone-summary/js/process.js');
+console.log('\nDnsZoneSummaryProcess');
+require('./dns-zone-summary.test.js')(test, assert, assertEq);
+
 console.log('\nSW / Registry');
 require('./sw-precache.test.js')(test, assert, assertEq, ROOT);
 

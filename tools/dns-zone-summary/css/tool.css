@@ -1,0 +1,158 @@
+/* 域名区汇总工具 */
+
+.dz-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #414b5a;
+  font-size: .86rem;
+  font-weight: 700;
+}
+
+#zone-input,
+#zone-output {
+  width: 100%;
+  min-height: 260px;
+  padding: 12px 14px;
+  resize: vertical;
+  border: 1px solid #d0d7e3;
+  border-radius: 7px;
+  outline: none;
+  background: #fafbff;
+  color: #1a1a2e;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: .88rem;
+  line-height: 1.65;
+}
+
+#zone-input:focus {
+  border-color: #2563a8;
+  background: #fff;
+}
+
+#zone-output {
+  min-height: 300px;
+  background: #f4f6fa;
+}
+
+.field-help,
+.result-note {
+  margin: 8px 0 0;
+  color: #687386;
+  font-size: .8rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  padding: 14px 16px;
+  border: 1px solid #e0e6ef;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  text-align: center;
+}
+
+.summary-card span {
+  display: block;
+  color: #2563a8;
+  font-size: 1.45rem;
+  font-weight: 700;
+}
+
+.summary-card small {
+  color: #687386;
+  font-size: .78rem;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.result-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-wrap {
+  max-height: 365px;
+  overflow: auto;
+}
+
+.mapping-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .84rem;
+}
+
+.mapping-table th,
+.mapping-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #e7ebf1;
+  text-align: left;
+  word-break: break-all;
+}
+
+.mapping-table th {
+  position: sticky;
+  top: 0;
+  background: #f4f7fb;
+  color: #3f4a5a;
+  font-weight: 700;
+}
+
+.mapping-table td {
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.mapping-arrow {
+  color: #2563a8;
+  font-weight: 700;
+}
+
+.empty-row td {
+  padding: 30px 10px;
+  color: #8a93a3;
+  font-family: inherit;
+  text-align: center;
+}
+
+.stat-badge-warn {
+  background: #fff2dc;
+  color: #9b5c00;
+}
+
+.invalid-list {
+  margin: 0;
+  padding-left: 22px;
+  color: #7a3e00;
+  font-size: .84rem;
+  line-height: 1.7;
+}
+
+.invalid-value {
+  font-family: "Menlo", "Consolas", monospace;
+  word-break: break-all;
+}
+
+@media (max-width: 820px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+}
