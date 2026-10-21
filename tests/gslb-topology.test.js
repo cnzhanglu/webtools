@@ -299,7 +299,7 @@ module.exports = function (test, assert, assertEq) {
       '每列应提供组件内置匹配方式');
     assert(app.indexOf('filterRowsByColumns') === -1, '不应再调用自研列过滤');
     assert(processJs.indexOf('filterRowsByColumns') === -1, '核心层不应再保留自研列过滤');
-    assert(sw.indexOf('webtools-v57') !== -1, 'PWA 缓存策略变更后应递增缓存版本');
+    assert(sw.indexOf('webtools-v58') !== -1, 'PWA 缓存策略变更后应递增缓存版本');
     assert(sw.indexOf('./shared/vendor/ag-grid/ag-grid-community.min.noStyle.js') !== -1, '应预缓存表格脚本');
     assert(sw.indexOf('./shared/vendor/ag-grid/ag-grid.css') !== -1, '应预缓存表格基础样式');
     assert(sw.indexOf('./shared/vendor/ag-grid/ag-theme-alpine.css') !== -1, '应预缓存表格主题');
