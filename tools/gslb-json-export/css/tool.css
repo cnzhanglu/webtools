@@ -51,6 +51,16 @@
   background: #fff;
 }
 
+.drop-hint {
+  font-size: .82rem;
+  color: #94a3b8;
+}
+
+.op-bar.drag-over {
+  outline: 2px dashed #2563a8;
+  background: #eef5ff;
+}
+
 .op-bar .status-bar {
   margin-left: auto;
   padding: 0;

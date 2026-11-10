@@ -2,7 +2,7 @@
  * GSLB JSON 导出 — UI 交互层
  *
  * 数据流：
- *   加载 JSON 文件 → 解析并扫描字段 → 穿梭框选列 → AG Grid 预览
+ *   点击「导入 JSON」或将文件拖入页面 → 解析并扫描字段 → 穿梭框选列 → AG Grid 预览
  *   → 列头过滤图标打开该列自己的匹配菜单（多列 AND）→ 单击行选中域名
  *   → 双击行或「查看关系图」打开近全屏弹窗 / 全量 CSV 或预览显示 CSV 导出（UTF-8 BOM）
  *   → 点击「生成创建命令」→ 按过滤域名生成 CLI 命令 → 弹窗展示 / 复制 / 下载
@@ -92,6 +92,7 @@ var GslbApp = (function () {
     document.getElementById('btn-load').addEventListener('click', function () {
       document.getElementById('file-input').click();
     });
+    bindDragDrop();
     document.getElementById('btn-preview').addEventListener('click', preview);
     document.getElementById('btn-export').addEventListener('click', exportCsv);
     document.getElementById('btn-export-display').addEventListener('click', exportDisplayCsv);
@@ -449,8 +450,13 @@ var GslbApp = (function () {
 
   function onFileSelected(e) {
     var file = e.target.files && e.target.files[0];
-    if (!file) return;
+    if (file) loadJsonFile(file);
+    // 清空后才能再次选择同一个文件
+    e.target.value = '';
+  }
 
+  /** 读取并解析 JSON，重置预览与选中状态。按钮选择与拖放共用。 */
+  function loadJsonFile(file) {
     var reader = new FileReader();
     reader.onload = function (ev) {
       try {
@@ -489,7 +495,65 @@ var GslbApp = (function () {
       alert('读取文件失败');
     };
     reader.readAsText(file, 'UTF-8');
-    e.target.value = '';
+  }
+
+  /**
+   * 整页拖放导入：拖到页面任意位置即加载 JSON。
+   * 仅当 dataTransfer 含文件时拦截，避免影响表格文本选中与关系图拖动。
+   * dragenter/dragleave 用计数器判断是否真正离开窗口，避免经过子元素时高亮闪烁。
+   */
+  function bindDragDrop() {
+    var dragDepth = 0;
+    var bar = document.querySelector('.op-bar');
+
+    function isFileDrag(e) {
+      var types = e.dataTransfer && e.dataTransfer.types;
+      if (!types) return false;
+      var i;
+      for (i = 0; i < types.length; i++) {
+        if (types[i] === 'Files') return true;
+      }
+      return false;
+    }
+
+    document.addEventListener('dragenter', function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragDepth++;
+      if (bar) bar.classList.add('drag-over');
+    });
+
+    document.addEventListener('dragover', function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+
+    document.addEventListener('dragleave', function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragDepth--;
+      if (dragDepth <= 0) {
+        dragDepth = 0;
+        if (bar) bar.classList.remove('drag-over');
+      }
+    });
+
+    document.addEventListener('drop', function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      dragDepth = 0;
+      if (bar) bar.classList.remove('drag-over');
+      var files = e.dataTransfer && e.dataTransfer.files;
+      var file = files && files[0];
+      if (!file) return;
+      // 一次拖入多个文件时只取第一个，与按钮导入一致
+      if (!/\.json$/i.test(file.name || '')) {
+        alert('请拖入 .json 文件');
+        return;
+      }
+      loadJsonFile(file);
+    });
   }
 
   function currentSchemeOrders() {

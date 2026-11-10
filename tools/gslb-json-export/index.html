@@ -34,6 +34,7 @@
     <input type="file" id="file-input" accept=".json,application/json">
     <div class="op-bar-row">
       <button class="btn btn-primary" id="btn-load" type="button">📂 导入 JSON</button>
+      <span class="drop-hint">或将 JSON 文件拖入页面</span>
       <label for="scheme-select">GSLB 配置导出方案：</label>
       <select id="scheme-select"></select>
       <button class="btn btn-outline" id="btn-preview" type="button">🔍 预览</button>
@@ -184,7 +185,7 @@
 
 操作步骤：
 1. 登录设备管理界面，依次点击解析管理 → 数据管理，点击「导出」，数据类型选择「动态DNS」，导出类型选择「全部数据导出」，点击确认后完成下载
-2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件
+2. 将步骤 1 下载的文件导入至工具，点击「导入 JSON」选择源文件，或直接将文件拖入页面
 3. 展开「GSLB 配置字段选择及排序」选择需要导出的字段，可排序（默认折叠）
 4. 点击「预览」查看表格；点击列头过滤图标设置该列的匹配方式和关键字；单击行选择域名，双击行或点「查看关系图」打开拓扑弹窗（仅 × 关闭）
 4a. 可选：按列过滤后点「生成创建命令」，可基于当前过滤结果批量生成 create gslb ... 命令；弹窗内支持复制与下载 TXT
